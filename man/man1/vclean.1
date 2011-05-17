@@ -1,0 +1,229 @@
+.TH VCLEAN 1 "November 2009" "" Netkit
+.SH NAME
+vclean \- cleanup netkit processes and configurations
+.SH SYNOPSIS
+\fBvclean\fR [options]
+
+
+\" ########################################
+
+.SH DESCRIPTION
+
+The \fIvclean\fR command can be used to perform some cleanup operations on the
+host machine. In order to run virtual machines, Netkit launches several processes
+and sometimes performs some configuration changes (e.g., when setting up ``\fBtap\fR''
+collision domains \(en see \fBvstart\fR(1) \(en). After stopping all the virtual
+machines the system is reverted to its original state. Nevertheless, sometimes
+it may be useful (or even necessary) to force a cleanup which stops hanging
+processes and removes any configuration change. In this sense, \fIvclean\fR
+can be considered as the Netkit ``panic button''.
+
+The use of \fIvclean\fR becomes necessary in (at least) the following situations:
+.IP \(en 2
+A network interface has been connected to a ``\fBtap\fR'' collision domain. After
+halting (or crashing) some virtual machines, the ``\fBtap\fR'' collision domain
+is not used any more and the corresponding configuration settings must be removed
+(see \fBvstart\fR(1) for a description of ``\fBtap\fR'' collision domains).
+.IP \(en 2
+A network interface has been attached ``on the fly'' to a running virtual machine
+by using \fBvconfig\fR (see \fBvconfig\fR(1)). After halting (or crashing) the
+machine, the corresponding virtual hub is still running and must be terminated.
+
+.PP
+
+\fIvclean\fR can perform several cleanup operations. If invoked without options,
+it just scans for virtual hubs launched by the current user that are still running
+but no longer used (i.e., there is no virtual machine that is connected to them).
+If any of the options listed below is provided, then only the requested action is
+performed. It is also possible to perform several actions in a single run.
+
+.TP
+.B
+--clean-all
+This option tells \fIvclean\fR to perform all the cleanup operations listed below.
+It is a shortcut for \fB-HKT\fR.
+.br
+Please \fBuse this option with care\fR: depending on the other command line
+switches you are using, this \fBmay kill virtual machines started by any user\fR!
+
+.TP
+.B
+-H
+.PD 0
+.TP
+.B
+--remove-hubs
+Terminate running virtual hubs (collision domains) that are not used any more
+(i.e., those that have no virtual machines attached). This is the default action
+when \fIvclean\fR is invoked without options.
+
+.TP
+.B
+-K
+.PD 0
+.TP
+.B
+--kill-machines
+Terminate all running virtual machines and virtual hubs. Virtual machines are
+killed in the same way as the ``vcrash -k'' command would do (see \fBvcrash\fR(1)).
+.br
+This is probably the most effective ``panic button''. In fact, using this option
+should result in getting rid of all Netkit processes, even the hanging ones
+(unless they are hanging so hard that only a reboot can destroy them).
+
+.TP
+.B
+-T
+.PD 0
+.TP
+.B
+--remove-tunnels
+When using an interface attached to a ``\fBtap\fR'' collision domain for the
+first time, \fIvstart\fR (or \fIvconfig\fR, depending on the command you have
+been using to configure the interface \(en see \fBvstart\fR(1), \fBvconfig\fR(1))
+takes care of automatically configuring the necessary host-side settings and, if
+found, also the iptables firewall. For details about the configuration parameters
+being altered, see \fBvstart\fR(1).
+
+This option removes any host-side configurations and restores the previous
+firewall settings. More precisely, the following operations are performed:
+
+1) If the iptables firewall is found, then both masquerading and packet forwarding
+for data passing through tap interfaces are disabled. In particular, the following
+rules are removed:
+.nf
+*nat
+-A POSTROUTING -j MASQUERADE
+*filter
+-A FORWARD -i nk_tap_+ -j ACCEPT
+.fi
+.br
+2) Kernel IP forwarding is disabled by echoing `0' to the special file
+.nh
+`/proc/sys/net/ipv4/ip_forward'.
+.hy
+.br
+3) Every tap interface (on the host side) is brought down and the corresponding
+tap device is removed.
+.br
+4) Permissions for the `/dev/net/tun' device are set to 660 (read/write for its
+owner and for other users in the same group; no permissions for other users).
+
+These operations require administrative privileges. The \fIvclean\fR
+command will take care of asking you for a password if needed. For more
+information about how Netkit gains root privileges, see \fBUSE_SUDO\fR and
+\fBSETTING UP NETKIT FOR USE WITH SUDO\fR in the man page of
+\fBnetkit.conf\fR(5).
+
+\fBNotice\fR: this action is in no way influenced by the \fB\-\-user\fR option.
+Using \fB\-\-remove\-tunnels\fR or \fB-T\fR causes all host-side configurations
+to be removed, regardless of the user who had requested them.
+
+.TP
+.B
+--test
+Instead of terminating virtual hubs and/or virtual machines, just show which
+processes would be killed. This option cannot be used together with \fB-q\fR
+(\fB\-\-quick\fR, \fB\-\-quiet\fR). Action \fB\-\-remove\-tunnels\fR is not
+affected by the use of \fB\-\-test\fR.
+
+.TP
+.B
+-u \fIUSERNAME\fR
+.PD 0
+.TP
+.B
+--user=\fIUSERNAME\fR
+This options limits the scope of the above actions to virtual machines and hubs
+owned by user \fIUSERNAME\fR. By default, \fIvclean\fR only terminates machines
+and hubs owned by the current user (i.e., the one who launched \fIvclean\fR). The
+special user name `\fB\-\fR' is reserved, and can be used to perform cleanup
+actions on every machine and hub, regardless of the user who started it. Please
+\fBuse the `\-\-user=-' or `-u -' option with extreme care\fR: depending on the
+options you are using, this \fBmay crash ALL virtual machines that are currently
+running on the host machine\fR.
+
+Action \fB\-\-remove\-tunnels\fR is not affected by this option.
+
+.PP
+Other supported options are:
+
+.TP
+.B
+-h
+.PD 0
+.TP
+.B
+--help
+Show usage information.
+
+.TP
+.B
+-q
+.PD 0
+.TP
+.B
+--quick
+.PD 0
+.TP
+.B
+--quiet
+By default, after killing processes \fIvclean\fR checks whether they have actually
+stopped. This option disables these checks, thus quickening the execution of \fIvclean\fR.
+It also suppresses any output, except errors and warnings.
+
+This option cannot be used in conjunction with \fB\-\-test\fR.
+
+.TP
+.B
+--version
+Print information about the installed Netkit release and the host kernel version
+and exit. If ``\fI<unavailable>\fR'' is printed instead of a version number,
+then the corresponding information could not be retrieved (for example because
+a non-standard Netkit kernel or filesystem is being used).
+
+
+\" ########################################
+
+.SH "ENVIRONMENT VARIABLES"
+
+All Netkit commands require that the \fBNETKIT_HOME\fR variable contains the
+name of the directory Netkit is installed in.
+
+Apart from this, \fIvclean\fR supports no other environment variables.
+
+
+\" ########################################
+
+.SH NOTES
+
+\fIvclean\fR has nothing to do with \fBlclean\fR(1). While the former works as
+a vacuum cleaner for unused and/or hanging Netkit processes, the latter is a
+tool to clean up directories containing Netkit labs. In particular, \fIvclean\fR
+works on processes (which have not necessarily been originated in a Netkit lab)
+and, optionally, on the system configuration (to remove tunnels and firewall
+settings), while \fBlclean\fR(1) works on the host filesystem (with the purpose
+of cleaning up temporary files created after running a Netkit lab).
+
+\" ########################################
+
+.SH "SEE ALSO"
+\fIlclean\fR(1),
+\fIvconfig\fR(1),
+\fIvcrash\fR(1),
+\fIvhalt\fR(1),
+\fIvlist\fR(1),
+\fIvstart\fR(1).
+
+
+\" ########################################
+
+.SH AUTHOR
+\fBvclean\fR script: Massimo Rimondini
+.br
+This man page: Massimo Rimondini
+
+
+\" ########################################
+
+.so include/bugreport.man

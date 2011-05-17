@@ -1,0 +1,36 @@
+.SH "REPORTING BUGS"
+Report bugs to <netkit.users@list.dia.uniroma3.it> or, alternatively, to <contact@netkit.org>.
+
+Bug reports should always include the following information:
+
+.PD 0
+.IP \(en 2
+Bug description (e.g., expected and actual behaviour).
+.IP \(en 2
+One or more command lines that can be used to reproduce the bug.
+.IP \(en 2
+Name and version of the offending command (e.g., vstart 1.0). You can get the
+command version by starting it with the option
+.nh
+\fB\-\-version\fR.
+.hy
+.IP \(en 2
+Complete output of the offending command (any
+.nh
+\fB\-\-verbose\fR
+.hy
+option should be
+used when producing this report).
+.IP \(en 2
+Version of the Netkit filesystem being used.
+.IP \(en 2
+Version of the Netkit kernel being used.
+.IP \(en 2
+Name and release of the Linux distribution being used on the host machine (e.g.,
+Debian, Ubuntu, Mandrake, Red Hat, Fedora, Gentoo, etc.).
+.IP \(en 2
+Host kernel release and platform. You can get these information by using the
+`uname -a' command.
+.IP \(en 2
+Description of any patch or changes applied to kernels (host and UML) and
+filesystems.

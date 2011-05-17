@@ -1,0 +1,207 @@
+#!/bin/sh
+
+#     Copyright 2002-2009 Stefano Pettini, Fabio Ricci, Massimo Rimondini
+#     Computer Networks Research Group, Roma Tre University.
+#
+#     This file is part of Netkit.
+# 
+#     Netkit is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+# 
+#     Netkit is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+# 
+#     You should have received a copy of the GNU General Public License
+#     along with Netkit.  If not, see <http://www.gnu.org/licenses/>.
+
+# This script can be used to crash a Netkit lab. It also takes care of removing
+# .disk files, so that the lab can be cleanly restarted.
+
+SCRIPTNAME=`basename $0`
+
+# The following line has been introduced to ensure backward compatibility
+: ${NETKIT_HOME:=$VLAB_HOME}
+
+if [ -z "$NETKIT_HOME" ]; then
+   echo 1>&2 "$SCRIPTNAME: The NETKIT_HOME environment variable is not properly set;"
+   echo 1>&2 "please set it as described in the Netkit documentation and try"
+   echo 1>&2 "again."
+   exit 1
+fi
+
+CMDLINE="$0 $*"
+
+. "$NETKIT_HOME/bin/script_utils"
+
+
+# Write to the vcommands log
+logWrite $0 $*
+
+
+# This function is used to print the lcrash usage
+help() {
+   echo
+   echo "Usage: $SCRIPTNAME [options] [MACHINE-NAME] ..."
+   cat << END_OF_HELP
+
+This command crashes the virtual machines of a Netkit lab. Crashing corresponds
+to hardly unplugging their power cord, which is very fast but at the same time
+may cause filesystem inconsistencies inside virtual machines. Depending on the
+command line being used, it is possible to crash only a subset of the virtual
+machines that make up the lab.
+Available options are:
+
+  -d DIRECTORY        Crash the lab inside DIRECTORY. By default, the lab in
+                      the current directory is crashed.
+  -F, --keep-fs       Avoid deleting virtual machines filesystems. This
+                      is useful when virtual machines are to be restarted while
+                      preserving filesystem contents. By default, all the
+                      filesystems are deleted after crashing the corresponding
+                      virtual machine.
+                      Notice that, regardless of this option, the model
+                      filesystem is never deleted.
+  -k, --kill          Crash virtual machines by simply killing their processes.
+                      The default setting is to first try crashing virtual
+                      machines by sending them a special message via their
+                      mconsole socket. If such an attempt fails, the command
+                      reverts to killing processes.
+                      If the mconsole method happens to fail too often, this
+                      option may result in a speedup of the crash process.
+                      Otherwise, it is advised to rely on the default setting,
+                      as using the mconsole is generally faster.
+  -l, --list          Show a list of running virtual machines after crashing
+                      the lab.
+  -q, --quick
+      --quiet         Disable checking whether virtual machines have actually
+                      crashed. This results in a faster crash process, but
+                      may cause some processes to hang. If this happens, try
+                      crashing again without using this option or use
+                      vclean.
+                      This option slightly reduces the amount of printed
+                      information as well.
+
+Other standard options are:
+
+  -h, --help          Show this help.
+      --version       Print version information and exit.
+
+If one or more MACHINE-NAMEs are passed on the command line, then only those
+machines will be crashed (and their filesystems deleted, if asked to). If any
+of the MACHINE-NAMEs is invalid (i.e., it does not correspond to a virtual
+machine of the lab), it will simply be skipped.
+
+END_OF_HELP
+}
+
+
+# Get command line options
+INVALID_OPTION=0
+OPT_LIST="help,version,kill,keep-fs,list,quick,quiet"
+CMDLINE_OPTIONS=`getopt -ql "$OPT_LIST" -- "hd:Fklq" "$@"`
+if [ $? -gt 0 ]; then
+   INVALID_OPTION=1
+fi
+
+
+# Using verbose mode tells vcrash to wait for virtual machines to stop before
+# returning.
+VERBOSE=1
+
+# Parse command line options
+parseCmdLine() {
+   while [ $# -gt 0 ]; do
+		CURRENT_ARGUMENT="$1"
+      case "$CURRENT_ARGUMENT" in
+      
+         -d)
+            shift; CURRENT_ARGUMENT="$1"
+            if [ ! -z "$LAB_DIRECTORY" ]; then
+               warning "$SCRIPTNAME" "$CMDLINE" "$0" \
+                  "Multiple directory specifications: where can I find the lab?"
+               exit 1
+            fi
+            LAB_DIRECTORY=`makeAbsolutePath "$CURRENT_ARGUMENT"`;;
+         
+         --help|-h)
+            help
+            exit;;
+            
+         --keep-fs|-F)
+            KEEP_FILESYSTEM=1;;
+         
+         --kill|-k)
+            KILL_MODE=1;;
+         
+         --list|-l)
+            LISTVM=1;;
+         
+         --quick|--quiet|-q)
+            unset VERBOSE;;
+         
+         --version)
+            showVersion
+            exit 0;;
+            
+         --)
+            shift
+            break;;
+      esac
+      shift
+   done
+   
+   while [ $# -gt 0 ]; do
+      checkSpaces "$1"
+      VHOSTLIST="$VHOSTLIST $1"
+      shift
+   done
+}
+eval parseCmdLine $CMDLINE_OPTIONS
+
+
+# Check whether user gave some strange options
+if [ $INVALID_OPTION -eq 1 ]; then
+   warning "$SCRIPTNAME" "$CMDLINE" "$0" "Invalid option or missing option parameter."
+   exit 1
+fi
+
+# If no lab directory has been given, assume current directory
+LAB_DIRECTORY=${LAB_DIRECTORY:-${PWD}}
+. "$NETKIT_HOME/bin/lcommon"
+
+# Check that the lab directory exists
+if [ ! -d "$LAB_DIRECTORY" ]; then
+   warning "$SCRIPTNAME" "$CMDLINE" "$0" "Lab directory ($LAB_DIRECTORY) does not exist."
+   exit 1
+fi
+
+# Check whether path to the lab directory contains spaces
+if containsRegexp LAB_DIRECTORY " "; then
+   warning "$SCRIPTNAME" "$CMDLINE" "$0" \
+            "Invalid lab directory: \"$LAB_DIRECTORY\" (path contains spaces)."
+   exit 1
+fi
+
+
+# Print some information about the lab
+echo
+becho "======================== Crashing lab ==========================="
+labWelcome
+becho "================================================================="
+
+# Crash virtual machines
+labCrash
+echo
+becho "Lab has been crashed."
+becho "================================================================="
+
+# Show a list of running virtual machines, if asked to
+if [ ! -z "$LISTVM" ]; then
+   echo
+   vlist
+fi
+
+echo

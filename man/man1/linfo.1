@@ -1,0 +1,89 @@
+.TH LINFO 1 "November 2009" "" Netkit
+.SH NAME
+linfo \- show information about a netkit lab
+.SH SYNOPSIS
+\fBlinfo\fR [options]
+
+
+\" ########################################
+
+.SH DESCRIPTION
+This command can be used to display the following information about a Netkit lab
+without launching it:
+
+.IP \(en 2
+descriptive information (retrieved from \fIlab.conf\fR)
+.IP \(en 2
+number of virtual machines that make up the lab
+.IP \(en 2
+whether the lab supports parallel startup (by means of a \fIlab.conf\fR file)
+
+.PP
+Optionally, \fIlinfo\fR can generate a graphical link-level topology map of
+the lab and save it inside a PostScript file. This requires the Graphviz library
+to be installed on your system.
+
+The following options are supported by \fIlinfo\fR:
+.TP
+.B
+\-d \fIDIRECTORY\fR
+Assume the Netkit lab that is located inside \fIDIRECTORY\fR. If no \fB\-d\fR
+option is provided, \fIlhalt\fR assumes that the lab is located in the
+current directory. The path to the lab directory (being that the current
+directory or one provided by \fB\-d\fR) must never contain spaces.
+
+.TP
+.B
+\-m \fIFILE\fR
+.PD 0
+.TP
+.B
+\-\-map=\fIFILE\fR
+Save a graphical link-level topology map of the lab in PostScript format inside
+\fIFILE\fR. This option requires the Graphviz library to be properly installed on your
+system in order to work.
+
+.PP
+The following standard options are also supported.
+
+.TP
+.B
+\-h
+.PD 0
+.TP
+.B
+\-\-help
+Show usage information.
+
+.TP
+.B
+\-\-version
+Print information about the installed Netkit release and the host kernel version
+and exit. If ``\fI<unavailable>\fR'' is printed instead of a version number,
+then the corresponding information could not be retrieved (for example because
+a non-standard Netkit kernel or filesystem is being used).
+
+
+\" ########################################
+
+.SH "SEE ALSO"
+\fIlstart\fR(1),
+\fIlclean\fR(1),
+\fIlcrash\fR(1),
+\fIlhalt\fR(1),
+\fIlrestart\fR(1),
+\fIltest\fR(1).
+    
+
+\" ########################################
+
+.SH AUTHOR
+
+\fIlinfo\fR script: Massimo Rimondini
+.br
+This man page: Massimo Rimondini
+
+
+\" ########################################
+
+.so include/bugreport.man

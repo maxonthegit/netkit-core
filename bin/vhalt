@@ -1,0 +1,231 @@
+#!/bin/sh
+
+#     Copyright 2002-2009 Maurizio Patrignani, Maurizio Pizzonia, Fabio Ricci,
+#     Massimo Rimondini - Computer Networks Research Group, Roma Tre University.
+#
+#     This file is part of Netkit.
+# 
+#     Netkit is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+# 
+#     Netkit is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+# 
+#     You should have received a copy of the GNU General Public License
+#     along with Netkit.  If not, see <http://www.gnu.org/licenses/>.
+
+# This is the Netkit vhalt script, which is used to gracefully shut down a
+# virtual machine.
+
+SCRIPTNAME=`basename $0`
+
+# The following line has been introduced to ensure backward compatibility
+: ${NETKIT_HOME:=$VLAB_HOME}
+
+if [ -z "$NETKIT_HOME" ]; then
+   echo 1>&2 "$SCRIPTNAME: The NETKIT_HOME environment variable is not properly set;"
+   echo 1>&2 "please set it as described in the Netkit documentation and try"
+   echo 1>&2 "again."
+   exit 1
+fi
+
+CMDLINE="$0 $*"
+
+. "$NETKIT_HOME/bin/script_utils"
+
+# Write to the vcommands log
+logWrite $0 $*
+
+
+# This function is used to print the vhalt usage
+help() {
+   echo
+   echo "Usage: $SCRIPTNAME [options] MACHINE-ID..."
+   cat << END_OF_HELP
+
+This script can be used to gracefully shutdown running virtual machines.
+MACHINE-ID is either the name or the PID of a virtual machine. Available options
+are:
+
+  -h, --help          Show this help.
+  -q, --quick
+      --quiet         Do not wait for virtual machines to shut down. Just issue
+                      the halt command and exit. Using this option also
+                      suppresses any output except errors and warnings.
+  -r, --remove-fs     Delete virtual machine (COW) filesystem after halting
+                      machine. Using this option has no effect on machines
+                      started with the --no-cow option. Log files are not
+                      removed.
+  -u, --user=USERNAME Halt virtual machine(s) owned by user USERNAME. By using
+                      the special user name '-' any virtual machine can be
+                      halted, regardless of its owner (administrative privileges
+                      are required). If MACHINE-ID is a virtual machine name,
+                      and the option --user=- is being used, then only the
+                      virtual machine reported by 'vlist --user=- MACHINE-ID' is
+                      halted.                      
+      --version       Print version information and exit.
+                   
+END_OF_HELP
+}
+
+
+# Get command line options
+INVALID_OPTION=0
+OPT_LIST="help,quick,quiet,user:,version,remove-fs"
+CMDLINE_OPTIONS=`getopt -ql "$OPT_LIST" -- "hqru:" "$@"`
+if [ $? -gt 0 ]; then
+   INVALID_OPTION=1
+fi
+
+
+
+USER=$USERID
+
+
+# Parse command line options
+parseCmdLine() {
+   while [ $# -gt 0 ]; do
+		CURRENT_ARGUMENT="$1"
+      case "$CURRENT_ARGUMENT" in
+      
+         --help|-h)
+            help
+            exit;;
+            
+         --user|-u)
+            shift; CURRENT_ARGUMENT="$1"
+            if [ "x$CURRENT_ARGUMENT" = "x" ]; then
+               warning "$SCRIPTNAME" "$CMDLINE" "$0" \
+                       "Expecting username."
+               exit 1
+            fi
+            checkSpaces "$CURRENT_ARGUMENT"
+            if [ "$CURRENT_ARGUMENT" = "-" ]; then
+               USER=""
+            else
+               USER=$CURRENT_ARGUMENT
+            fi;;
+            
+         --quick|--quiet|-q)
+            BE_QUIET=1;;
+            
+         --remove-fs|-r)
+            REMOVE_FS=1;;
+            
+         --version)
+            showVersion
+            exit 0;;
+            
+         --)
+            shift
+            break;;
+      esac
+      shift
+   done
+   
+   while [ $# -gt 0 ]; do
+      checkSpaces "$1"
+      VM_IDS="$VM_IDS $1"
+         
+      shift
+   done
+}
+eval parseCmdLine $CMDLINE_OPTIONS
+
+
+# Check whether user gave some strange options
+if [ $INVALID_OPTION -eq 1 ]; then
+   warning "$SCRIPTNAME" "$CMDLINE" "$0" "Invalid option or missing option parameter."
+   exit 1
+fi
+
+
+# Check whether virtual machine name is missing
+if [ -z "$VM_IDS" ]; then
+   warning "$SCRIPTNAME" "$CMDLINE" "$0" "Virtual machine name/PID is missing."
+   exit 1
+fi
+
+
+# Virtual machine filesystem cannot be removed if in quiet mode, because the
+# machine may write files during shutdown
+if [ ! -z "$REMOVE_FS" -a ! -z "$BE_QUIET" ]; then
+   warning "$SCRIPTNAME" "$CMDLINE" "$0" "Filesystem cannot be removed if working in quiet mode."
+   exit 1
+fi
+
+
+
+
+
+# This function removes a virtual machine filesystem
+removeFs() {
+   [ ! -f "$1" ] && return;      # Filesystem does not exist
+   # We assume we are not in quiet mode (filesystems are not removed if in quiet mode)
+   echo -n "Removing filesystem \"$1\"... "
+   rm -f "$1" > /dev/null 2>&1 && echo "done". || echo "failed!"
+}
+
+
+for VM in $VM_IDS; do
+   if echo $VM | grep -qE "^[0-9]+$"; then
+      # This is a virtual machine PID
+      if ! getVMinfoByPID "$VM"; then
+         echo 1>&2 "$SCRIPTNAME: no virtual machine having PID $VM exists."
+      else
+         [ -z "$BE_QUIET" ] && echo -n "Halting virtual machine \"$VMINFO_NAME\" (PID $VMINFO_PID) owned by $VMINFO_USER [                    ]\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b"
+         uml_mconsole "$VMINFO_MCONSOLE" cad > /dev/null 2>&1
+         if [ -z "$BE_QUIET" ]; then
+            ATTEMPTS=1;
+            while getVMinfoByPID "$VM"; do
+               sleep 2
+               echo -n "."
+               if [ $ATTEMPTS -eq 20 ]; then
+                  break
+               fi
+               ATTEMPTS=$(($ATTEMPTS+1))
+            done
+            echo
+            if getVMinfoByPID "$VM"; then
+               echo 1>&2 "$SCRIPTNAME: could not shut down virtual machine having PID $VM."
+            else
+               [ ! -z "$REMOVE_FS" -a "$VMINFO_FS" != "$VMINFO_SHAREDFS" ] && removeFs "$VMINFO_FS"
+            fi
+         fi
+      fi
+   else
+      # This is a virtual machine name
+      if ! getVMinfoByName "$USER" "$VM"; then
+         echo -n 1>&2 "$SCRIPTNAME: no virtual machine named \"$VM\" exists"
+         if [ ! -z "$USER" ]; then
+            echo " for user $USER."
+         else
+            echo "."
+         fi
+      else
+         [ -z "$BE_QUIET" ] && echo -n "Halting virtual machine \"$VMINFO_NAME\" (PID $VMINFO_PID) owned by $VMINFO_USER [                    ]\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b"
+         uml_mconsole "$VMINFO_MCONSOLE" cad > /dev/null 2>&1
+         if [ -z "$BE_QUIET" ]; then
+            ATTEMPTS=1
+            while getVMinfoByName "$USER" "$VM"; do
+               sleep 2
+               echo -n "."
+               if [ $ATTEMPTS -eq 20 ]; then
+                  break
+               fi
+               ATTEMPTS=$(($ATTEMPTS+1))
+            done
+            echo
+            if getVMinfoByName "$USER" "$VM"; then
+               echo 1>&2 "$SCRIPTNAME: could not shut down virtual machine \"$VM\"."
+            else
+               [ ! -z "$REMOVE_FS" -a "$VMINFO_FS" != "$VMINFO_SHAREDFS" ] && removeFs "$VMINFO_FS"
+            fi
+         fi
+      fi
+   fi
+done

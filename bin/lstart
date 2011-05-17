@@ -1,0 +1,482 @@
+#!/bin/sh
+
+#     Copyright 2002-2009 Stefano Pettini, Fabio Ricci, Massimo Rimondini
+#     Computer Networks Research Group, Roma Tre University.
+#
+#     This file is part of Netkit.
+# 
+#     Netkit is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+# 
+#     Netkit is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+# 
+#     You should have received a copy of the GNU General Public License
+#     along with Netkit.  If not, see <http://www.gnu.org/licenses/>.
+
+# This script can be used to start a Netkit lab or a subportion of it.
+
+SCRIPTNAME=`basename $0`
+
+# The following line has been introduced to ensure backward compatibility
+: ${NETKIT_HOME:=$VLAB_HOME}
+
+if [ -z "$NETKIT_HOME" ]; then
+   echo 1>&2 "$SCRIPTNAME: The NETKIT_HOME environment variable is not properly set;"
+   echo 1>&2 "please set it as described in the Netkit documentation and try"
+   echo 1>&2 "again."
+   exit 1
+fi
+
+CMDLINE="$0 $*"
+
+. "$NETKIT_HOME/bin/script_utils"
+
+
+# Write to the vcommands log
+logWrite $0 $*
+
+# Used later on to return the status of the lab test
+EXIT_VALUE=0
+
+# This function is used to print the lstart/ltest usage
+help() {
+   echo
+   echo "Usage: $SCRIPTNAME [options] [MACHINE-NAME] ..."
+   echo
+   if [ "$SCRIPTNAME" = "ltest" ]; then
+      echo "This command can be used to test a Netkit lab. Depending on the command line"
+   else
+      echo "This command can be used to start a Netkit lab. Depending on the command line"
+   fi
+   cat << END_OF_HELP
+arguments, it is possible to start up the whole lab or just some of the
+virtual machines that compose it.
+Available options are:
+
+END_OF_HELP
+   if [ "$SCRIPTNAME" = "ltest" ]; then
+      echo "  -d DIRECTORY        Assume the lab to be tested is located inside DIRECTORY."
+   else
+      echo "  -d DIRECTORY        Assume the lab to be started is located inside DIRECTORY."
+   fi
+   cat << END_OF_HELP
+                      By default, it is assumed that the lab is located in the
+                      current directory.
+  -F, --force-lab     By default, Netkit refuses to start a lab in a directory
+                      that has neither a lab.conf nor a lab.dep file. Enable
+                      this option if you really want to start a lab without
+                      any of those two files.
+END_OF_HELP
+   if [ "$SCRIPTNAME" != "ltest" ]; then
+      cat << END_OF_HELP
+  -f, --fast          Do not wait for a virtual machine to complete the boot
+                      phase before starting the next one. This option has no
+                      effect when parallel startup is being used, and is not
+                      impacted by the use of the -p option.
+END_OF_HELP
+   fi
+   cat << END_OF_HELP
+  -l, --list          Show a list of running virtual machines after starting
+                      up the lab.
+  -o, --pass=OPTION   Pass OPTION unaltered to vstart. This will affect all the
+                      (newly started) virtual machines of the lab.
+  -p[VALUE]           Enable parallel startup, even if a lab.dep file does not
+                      exist inside the lab directory. If a VALUE is provided,
+                      it determines the maximum number of virtual machines that
+                      can be launched simultaneously. VALUE must be a positive
+                      integer. A VALUE of 0 corresponds to setting no limit.
+                      This option is incompatible with -s. Default setting if
+END_OF_HELP
+   echo "                      no VALUE is provided is $MAX_SIMULTANEOUS_VMS."
+   cat << END_OF_HELP
+  -s, --sequential    Disable parallel startup, even if a lab.dep file is found
+                      to exist inside the lab directory. This option conflicts
+                      with -p.
+  -w, --wait=SECONDS  Wait the specified amount of time before launching the
+                      next virtual machine. Of course, this is only useful when
+                      using either parallel startup or the -f option.
+
+END_OF_HELP
+if [ "$SCRIPTNAME" = "ltest" ]; then
+   cat << END_OF_HELP
+ltest-specific options follow:
+
+  -R, --rebuild-signature Unconditionally rebuild the test signature,
+                      overwriting any existing one.
+  -S, --script-mode   Use a terser and prettier output, suitable for automating
+                      the test of several labs.
+  --verify=TESTTYPE   When performing the test, force ltest to verify the
+                      outcome of the test specified by TESTTYPE. Allowed values
+                      for TESTTYPE are:
+                        user       check the outcome of user-defined tests only
+                        builtin    check the outcome of builtin tests only
+                        both       always check the outcome of all tests
+                      By default, for each virtual machine ltest verifies only
+                      the user-defined test if one is available in the
+                      signature, or only the built-in test otherwise.
+
+END_OF_HELP
+fi
+   cat << END_OF_HELP
+Other standard options are:
+
+  -h, --help          Show this help.
+  -v, --verbose       Show details about virtual machines while starting them.
+      --version       Print version information and exit.
+
+Notice: using parallel startup requires the \`make' utility to be properly
+installed.
+
+By default, all the virtual machines of the lab are started. If one or more
+MACHINE-NAMEs are passed on the command line, then only those machines will be
+actually started. If any of the MACHINE-NAMEs is invalid (i.e., it does not
+correspond to a virtual machine of the lab), it will simply be skipped.
+
+END_OF_HELP
+if [ "$SCRIPTNAME" = "ltest" ]; then
+   cat << END_OF_HELP
+The return value of ltest is zero (=good) if and only if the test completed
+successfully or a new test signature has been produced.
+
+END_OF_HELP
+fi
+}
+
+
+# Get command line options
+INVALID_OPTION=0
+OPT_LIST="help,version,verbose,list,pass:,makefile,sequential,wait:,force-lab"
+SHORTOPT_LIST="hd:vlo:p::sw:F"
+if [ "$SCRIPTNAME" = "ltest" ]; then
+   OPT_LIST="${OPT_LIST},script-mode,rebuild-signature,verify:"
+   SHORTOPT_LIST="${SHORTOPT_LIST}SR"
+fi
+if [ "$SCRIPTNAME" != "ltest" ]; then
+   # Fast mode is not allowed in test mode
+   OPT_LIST="${OPT_LIST},fast"
+   SHORTOPT_LIST="${SHORTOPT_LIST}f"
+fi
+CMDLINE_OPTIONS=`getopt -ql "$OPT_LIST" -- "$SHORTOPT_LIST" "$@"`
+if [ $? -gt 0 ]; then
+   INVALID_OPTION=1
+fi
+
+
+# Parse command line options
+parseCmdLine() {
+   while [ $# -gt 0 ]; do
+      CURRENT_ARGUMENT="$1"
+      case "$CURRENT_ARGUMENT" in
+         -d)
+            shift; CURRENT_ARGUMENT="$1"
+            if [ ! -z "$LAB_DIRECTORY" ]; then
+               warning "$SCRIPTNAME" "$CMDLINE" "$0" \
+                  "Multiple directory specifications: where can I find the lab?"
+               exit 1
+            fi
+            LAB_DIRECTORY=`makeAbsolutePath "$CURRENT_ARGUMENT"`;;
+         
+         --force-lab|-F)
+            FORCE_LAB=1;;
+            
+         --fast|-f)
+            FASTMODE=1;;
+         
+         --help|-h)
+            help
+            exit;;
+            
+         --list|-l)
+            LISTVM=1;;
+            
+         --makefile)
+            # This is a hidden option which is used by lstart/ltest itself when
+            # parallel startup is enabled.
+            MAKEFILE=1;;
+         
+         --pass|-o)
+            shift; CURRENT_ARGUMENT="$1"
+            PASSTHROUGH_OPTIONS="$PASSTHROUGH_OPTIONS $CURRENT_ARGUMENT";;
+            
+         -p)
+            shift; CURRENT_ARGUMENT="$1"
+            if [ ! -z "$CURRENT_ARGUMENT" ]; then
+               if ! echo "$CURRENT_ARGUMENT" | grep -q "^[0-9][0-9]*$"; then
+                  warning "$SCRIPTNAME" "$CMDLINE" "$0" \
+                     "Invalid setting for option -p: \"$CURRENT_ARGUMENT\". Positive integer expected."
+                  exit 1
+               fi
+               if [ ! -z "$FORCE_PARALLEL_MODE" ]; then
+                  warning "$SCRIPTNAME" "$CMDLINE" "$0" \
+                     "Option -p is used multiple times."
+                  exit 1
+               fi
+               MAX_SIMULTANEOUS_VMS="$CURRENT_ARGUMENT"
+            fi
+            FORCE_PARALLEL_MODE=1;;
+            
+         --sequential|-s)
+            BE_SEQUENTIAL=1;;
+         
+         --verbose|-v)
+            VERBOSE=1;;
+
+         --version)
+            showVersion
+            exit 0;;
+            
+         --wait|-w)
+            shift; CURRENT_ARGUMENT="$1"
+            if ! echo "$CURRENT_ARGUMENT" | grep -q "^[0-9][0-9]*$"; then
+               warning "$SCRIPTNAME" "$CMDLINE" "$0" \
+                  "Invalid setting for option -w: \"$CURRENT_ARGUMENT\". Positive integer expected."
+               exit 1
+            fi
+            GRACE_TIME="$CURRENT_ARGUMENT";;
+         
+         --script-mode|-S)
+            SCRIPTMODE=1;;
+
+         --rebuild-signature|-R)
+            CREATE_SIGNATURE=1;;
+
+         --verify)
+            shift; CURRENT_ARGUMENT="$1"
+            case "$CURRENT_ARGUMENT" in
+               user|builtin|both)
+                  VERIFY="$CURRENT_ARGUMENT";;
+               *)
+                  warning "$SCRIPTNAME" "$CMDLINE" "$0" \
+                     "Invalid setting for option --verify: \"$CURRENT_ARGUMENT\"."
+                  exit 1;;
+            esac;;
+
+         --)
+            shift
+            break;;
+      esac
+      shift
+   done
+   
+   while [ $# -gt 0 ]; do
+      checkSpaces "$1"
+      VHOSTLIST="$VHOSTLIST $1"
+      shift
+   done
+}
+eval parseCmdLine $CMDLINE_OPTIONS
+
+
+# Check whether user gave some strange options
+if [ $INVALID_OPTION -eq 1 ]; then
+   warning "$SCRIPTNAME" "$CMDLINE" "$0" "Invalid option or missing option parameter."
+   exit 1
+fi
+
+# If no lab directory has been given, assume current directory
+LAB_DIRECTORY=${LAB_DIRECTORY:-${PWD}}
+. "$NETKIT_HOME/bin/lcommon"
+
+# Check that the lab directory exists
+if [ ! -d "$LAB_DIRECTORY" ]; then
+   warning "$SCRIPTNAME" "$CMDLINE" "$0" "Lab directory ($LAB_DIRECTORY) does not exist."
+   exit 1
+fi
+
+# Check whether path to the lab directory contains spaces
+if containsRegexp LAB_DIRECTORY " "; then
+   warning "$SCRIPTNAME" "$CMDLINE" "$0" \
+            "Invalid lab directory: \"$LAB_DIRECTORY\" (path contains spaces)."
+   exit 1
+fi
+
+# Check whether parallel startup and -f are being used together
+if [ -f "$LAB_DIRECTORY/lab.dep" -a ! -z "$FASTMODE" -a -z "$BE_SEQUENTIAL" ]; then
+   echo 1>&2 "Warning: fast mode is ignored when using parallel startup."
+fi
+
+# Check if -p and -s options are being used together
+if [ ! -z "$FORCE_PARALLEL_MODE" -a ! -z "$BE_SEQUENTIAL" ]; then
+   warning "$SCRIPTNAME" "$CMDLINE" "$0" \
+            "Options -s and -p cannot be used together."
+   exit 1
+fi
+
+# Check if the script has been invoked for testing
+if [ "$SCRIPTNAME" = "ltest" ]; then
+   TESTMODE=1
+fi
+
+# By default, hide .disk files when running tests
+[ ! -z "$TESTMODE" ] && PASSTHROUGH_OPTIONS="$PASSTHROUGH_OPTIONS -D"
+
+# Quickly start a virtual machine and exit, if asked to
+if [ ! -z "$MAKEFILE" ]; then
+   # The VHOSTLIST variable already contains the name of the virtual machine(s)
+   # to be started.
+   
+   # Make sure to wait for .ready files to appear. Otherwise, no dependencies
+   # would be satisfied!
+   unset FASTMODE
+   
+   labStart
+   exit
+fi
+
+if [ ! -f "$LAB_DIRECTORY/lab.conf" -a ! -f "$LAB_DIRECTORY/lab.dep" -a -z "$FORCE_LAB" ]; then
+   warning "$SCRIPTNAME" "$CMDLINE" "$0" \
+            "This does not appear to be a lab directory. Use option -F to convince me it is."
+   exit 1
+fi
+
+
+
+
+
+# Get ready to start the lab
+
+
+
+
+# Print some information about the lab
+[ -z "$SCRIPTMODE" ] && echo
+[ -z "$TESTMODE" ] && becho "======================== Starting lab ==========================="
+[ ! -z "$TESTMODE" -a -z "$SCRIPTMODE" ] && becho "======================== Testing lab ============================"
+[ -z "$SCRIPTMODE" ] && labWelcome
+[ -z "$SCRIPTMODE" ] && becho "================================================================="
+
+
+if [ ! -z "$TESTMODE" ]; then
+   # By default, virtual machines are run without terminals during the tests.  We
+   # impose this by setting environment variables for vstart, if not alredy set.
+   # This still allows the user to override the setting by using an option like
+   # --pass=--con0=xterm
+   export NETKIT_CON0 NETKIT_CON1
+   : ${NETKIT_CON0:=none}
+   : ${NETKIT_CON1:=none}
+   
+   # Clean up the lab directory before starting
+   labClean >/dev/null 2>&1
+fi
+
+[ ! -z "$SCRIPTMODE" ] && echo -n "Starting lab... "
+# Check whether a lab.dep file exists. If so, enable parallel startup of
+# virtual machines.
+if [ -f "$LAB_DIRECTORY/lab.dep" -a -z "$BE_SEQUENTIAL" ] || [ ! -z "$FORCE_PARALLEL_MODE" ]; then
+   # Use parallel startup
+   if [ -z "$SCRIPTMODE" ]; then
+      becho "You chose to use parallel startup."
+      labStartParallel
+   else
+      labStartParallel >/dev/null 2>&1
+   fi
+else
+   # Use sequential startup
+   
+   # If VHOSTLIST is not empty, then labStart takes care of starting only
+   # the machines listed in VHOSTLIST; those appearing in VHOSTLIST but
+   # that are not part in the lab will simply be skipped.
+   if [ -z "$SCRIPTMODE" ]; then
+      labStart
+   else
+      labStart >/dev/null
+   fi
+fi
+
+COLOR_YELLOW='\033[33;1m'
+COLOR_RED='\033[31;1m'
+COLOR_GREEN='\033[32;1m'
+COLOR_NORMAL='\033[0m'
+
+if [ -z "$SCRIPTMODE" ]; then
+   echo
+   becho "The lab has been started."
+   becho "================================================================="
+else
+   echo -n "Testing... "
+fi
+
+if [ ! -z "$TESTMODE" ]; then
+   # Wait for the test to finish
+   MACHINES_COUNT=$(echo $VHOSTLIST | wc -w)
+   while [ $(ls ${LAB_DIRECTORY}/*.testdone 2>/dev/null | wc -l) -lt "$MACHINES_COUNT" ]; do
+      sleep 1
+   done
+
+   # Test finished: now crash the lab
+   if [ -z "$SCRIPTMODE" ]; then
+      becho "Stopping lab..."
+   else
+      echo -n "Stopping lab... "
+   fi
+   labCrash >/dev/null 2>&1
+   labClean >/dev/null 2>&1
+
+   # Check whether we need to build a test signature or to verify
+   # the test outcome
+   if [ ! -d "$LAB_DIRECTORY/_test/signature" -o ! -z "$CREATE_SIGNATURE" ]; then
+      # (Re)create the test signature
+      rm -fr "$LAB_DIRECTORY/_test/signature" >/dev/null 2>&1
+      mv "$LAB_DIRECTORY/_test/results" "$LAB_DIRECTORY/_test/signature"
+      if [ -z "$SCRIPTMODE" ]; then
+         becho "Test signature created."
+      else
+         echo "test completed.\t\t[ ${COLOR_YELLOW}SIGN${COLOR_NORMAL} ]"
+      fi
+   else
+      # Verify the test outcome against the signature
+      case "$VERIFY" in
+         user)
+            diff -qEbB $LAB_DIRECTORY/_test/signature/*.user --to-file "$LAB_DIRECTORY/_test/results" >/dev/null 2>&1
+            EXIT_VALUE=$?;;
+         builtin)
+            diff -qEbB $LAB_DIRECTORY/_test/signature/*.default --to-file "$LAB_DIRECTORY/_test/results" >/dev/null 2>&1
+            EXIT_VALUE=$?;;
+         both)
+            diff -qEbBr "$LAB_DIRECTORY/_test/signature" --to-file "$LAB_DIRECTORY/_test/results" >/dev/null 2>&1
+            EXIT_VALUE=$?;;
+         *)
+            # VERIFY has not been set
+            EXIT_VALUE=0
+            for CURRENT_VHOST in $VHOSTLIST; do
+               if [ -f "$LAB_DIRECTORY/_test/signature/$CURRENT_VHOST.user" ]; then
+                  diff -qEbB "$LAB_DIRECTORY/_test/signature/$CURRENT_VHOST.user" --to-file "$LAB_DIRECTORY/_test/results" >/dev/null 2>&1
+                  EXIT_VALUE=$(($EXIT_VALUE + $?))
+               else
+                  if [ -f "$LAB_DIRECTORY/_test/signature/$CURRENT_VHOST.default" ]; then
+                     diff -qEbB "$LAB_DIRECTORY/_test/signature/$CURRENT_VHOST.default" --to-file "$LAB_DIRECTORY/_test/results" >/dev/null 2>&1
+                     EXIT_VALUE=$(($EXIT_VALUE + $?))
+                  fi
+               fi
+            done;;
+      esac
+      if [ -z "$SCRIPTMODE" ]; then
+         if [ "$EXIT_VALUE" -eq 0 ]; then
+            becho "Test succeeded."
+         else
+            becho "Test FAILED!"
+         fi
+      else
+         if [ "$EXIT_VALUE" -eq 0 ]; then
+            echo "test completed.\t\t[ ${COLOR_GREEN} OK ${COLOR_NORMAL} ]"
+         else
+            echo "test completed.\t\t[ ${COLOR_RED}FAIL${COLOR_NORMAL} ]"
+         fi
+      fi
+   fi
+fi
+
+# Show a list of running virtual machines, if asked to
+if [ ! -z "$LISTVM" ]; then
+   echo
+   vlist
+fi
+
+[ -z "$SCRIPTMODE" ] && echo
+exit $EXIT_VALUE
+

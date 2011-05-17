@@ -1,0 +1,330 @@
+2.8
+  - uml-utilities have been recompiled with dynamic linking and with Ubuntu
+    patches applied. This makes them work also under Ubuntu 10.10. Moreover,
+    uml_mconsole now also looks inside $HOME/.uml for management console sockets.
+  - Fixed an incompatibility with the dash shell that caused sudo to fail to
+    work (bug #9).
+  - Fixed setup of network interfaces when using gnome-terminal or konsole (bug
+    #10).
+  - Fixed bugs with bash autocompletion, which broke it with most recent bash
+    releases.
+  - Fixed warnings issued by dash when starting labs.
+  - Using konsole tabs now works with KDE 4 (and no longer does with KDE 3).
+  - Environment variables are now expanded in kernel paths.
+  - Kernel modules directory failed to mount when a custom kernel was specified
+    on the command line using a relative path. Fixed.
+  - Several (harmless) interface assignment warnings occurred on Ubuntu hosts
+    when starting a lab. Fixed.
+  - Setup of tap interfaces could hang for a while because of iptables attempting
+    to perform DNS lookups. Fixed.
+  - Small changes to the man pages. Also, documentation for lab.conf and lab.dep
+    has been moved from the lstart man page to a dedicated page.
+  - Improved checks in check_configuration.sh: filesystem is checked for sparse
+    files support and host is checked for the ability to run 32-bit binary
+    executables.
+
+2.7
+  - A tricky bug prevented tap interfaces not having lowest or highest
+    numbering from being properly configured. Fixed. (bugs #2,#4)
+  - Enabled the use of sudo (instead of su) to gain root privileges for
+    administrative operations (e.g., setup of tap interfaces). See the man page
+    of netkit.conf for more information about the feature (look for USE_SUDO
+    and SETTING UP NETKIT FOR USE WITH SUDO). (bug #3)
+  - Introduced an option that allows to bypass the port-helper to attach the
+    primary console of virtual machine to a terminal emulator. Results in
+    faster startup and more stable environment. This option is enabled by
+    default and is only exposed through netkit.conf (look for CON0_PORTHELPER).
+  - Introduced experimental support for command line completion (for bash users
+    only). Put the following line at the end of your .bashrc and there you go:
+      . $NETKIT_HOME/bin/netkit_bash_completion
+    Autocompletion is supported for all command line options, existing collision
+    domain names, file and directory names, terminal types, according to the
+    context.
+  - Introduced the possibility to hide virtual machine .disk files. Machines
+    continue to operate normally, since disk files are only unlinked once
+    there is no process left that is using them.
+  - Some configuration parameters in lab.conf (list of machines, generic lab
+    information) were incorrectly processed by the ltools or not processed at
+    all. Fixed.
+  - Improved ltest. Virtual machines are now started without a terminal
+    attached, which eases the execution of regression tests. Also, ltest now
+    supports a signature-and-test cycle: creates a signature of a correctly
+    running lab upon first execution, and compares it with the results of
+    subsequent tests to assess the operation of the lab. User-defined tests now
+    override built-in tests by default in the verification phase. Fancier output
+    and return code are now supported to enable scripted lab tests. Also
+    improved built-in test scripts.
+  - Instructions for building a custom kernel have been moved to the README
+    file of the Netkit kernel package. The man page netkit-kernel (7) has been
+    removed. The same applies to filesystem build instructions and to the
+    netkit-filesystem (7) man page.
+  - Fixed incompatibilities in using escape sequences with the dash shell.
+  - A lock file in konsole_tabs.sh is now forcedly (-f) removed.
+  - Dropped version numbers from Netkit commands. They were confusing and
+    provided no additional information.
+  - If two different users ran virtual machines with the same name and one of
+    the user names was a substring of the other, the behaviour of vcommands
+    was messed up. Also, vlist improperly allowed to show the details of a
+    specific virtual machine when all users were considered (-u -). The first
+    behavior has been fixed, while the second one has been forbidden.
+  - Using the -x option instead of -e for gnome-terminals.
+  - Removed deprecated options from vstart and vlist.
+  - Disabled log files for virtual machines. They were pretty useless. Cleaning
+    commands (e.g., lclean) still take care of removing them, if found to
+    exist.
+  - Fixed small bugs in reporting the kernel and filesystem version.
+  - lstart now requires at least a lab.conf or a lab.dep file to be present in
+    the lab directory, unless option -F is used. This has been introduced in
+    order to prevent the user from accidentally starting random virtual machines
+    from a directory that does not contain a lab.
+  - Reverted behaviour of the -m option of vstart. Before this change, using the
+    default filesystem or the NETKIT_FILESYSTEM environment variable assumed
+    that the filesystem image contained a partition table, while option -m did
+    not. Now also option -m does.
+  - Increased default memory amount for virtual machines to 32MB.
+  - lclean now removes .testdone files.
+  - lstart now places virtual machine filesystems inside the lab directory.
+  - Number of simultaneously started virtual machines when using parallel startup
+    (-p option) has been raised to 5.
+  - lstart did not operate properly when used with option -d (hung after the
+    first virtual machine). Fixed.
+
+2.6
+  - Changed the scripts to avoid SELinux warnings during the boot phase of
+    virtual machines.
+  - ltools have been slightly changed to simplify development on our part
+    (e.g., virtual machines named CVS are no longer tolerated, etc.)
+  - Fixed a small bug in the portion of code reporting version numbers.
+  - Slightly enhanced error reporting in vconfig. Also, fixed a bug that caused
+    a virtual hub to be started even when detaching a network interface.
+  - Minor fixes in the README and INSTALL files.
+  - Upgraded the uml tools to version 20070815 (Debian lenny).
+
+2.5
+  - Lstart now tolerates commas and dots in interface names when defining a tap
+    interface.
+  - Fixed a very little bug which caused vstart to print an error when using
+    options -q and -p in the presence of tap interfaces.
+  - Fixed a bug which prevented ltest from working properly if asked to work
+    using parallel startup (-p option).
+  - It is now possible to launch virtual machines without a primary console.
+  - Fixed the scripts for more strict POSIX compliance. This makes them
+    compatible with Ubuntu Linux distributions.
+  - vconfig now supports dinamically removing network interfaces from running
+    virtual machines (consequent to the corresponding support provided by newer
+    versions of the UML kernel).
+  - Raised default memory amount for virtual machines to 16MB.
+  - Fixed a bug that prevented tap interfaces from working properly upon first
+    usage.
+  - Fixed some minor bugs in the scripts and removed some redundant function
+    definitions.
+  - Updated documentation according to the above fixes.
+
+2.4
+  - Very improved ltools:
+    - Some new options have been introduced, allowing to change the behaviour of
+      the underlying vtools. The most interesting improvement is the possibility
+      to start multiple virtual machines simultaneously. Depending on user
+      needs, this can also be done while keeping an eye on dependencies (e.g.,
+      "pc3 can only start after pc1 and pc2"). In a few words: lab.dep is now
+      supported!
+    - lstart now warns if there are duplicate interface definitions inside
+      lab.conf. Also, any option of vstart can be used inside lab.conf. 
+    - lclean now also removes log files.
+    - lrestart has disappeared, and is now simply a link to lstart. The same
+      holds for ltest, which is a link to lstart. Depending on the name with
+      which it is invoked, lstart's behaviour changes as needed.
+    - lstart now produces much terser output.
+    - By default, lcrash removes virtual machines filesystems, so that a lab can
+      be restarted without having to use lclean first.
+    - No more need to use the "." to tell the ltools that the lab is in the
+      current directory.
+    - The command line help is now much clearer.
+    - A new lcommand has been introduced: linfo. It provides general information
+      about a lab without starting it. Optionally, it may also generate a
+      PostScript file with a sketch of the link-level topology of the lab.
+  - (More or less slightly) improved man pages.
+  - Enriched the documentation with several warnings about installing Netkit on
+    FAT32 filesystems and using scripts and/or lab configurations which use the
+    CR+NL line break convention.
+  - Removed a vcrash warning stating the impossibility to delete a socket file
+    for a virtual hub.
+  - Fixed a bug which prevented vlist and halt/crash related commands from
+    working properly with accounts using long user names (maximum tolerated user
+    name length is now 35 characters - I know it's weird to set a limit on it,
+    but it's really necessary ;-).
+  - Improved check_configuration.sh (now it has a modular structure and also
+    warns about VDSO support in the host kernel).
+  - The --version option now reports information about the version number of all
+    the installed Netkit components as well as that of the host kernel.
+  - Improved vcrash mechanism. Hangups of the mconsole helper tool are now
+    detected and properly handled (any of you who has ever seen those
+    everlasting "Crashing..." lines knows what I am talking about). Moreover, if
+    crash via mconsole fails, then vcrash automatically attempts to kill virtual
+    machines without user intervention. Last but not least, the process killing
+    routine has been revised; before this fix, there were chances of leaving
+    some processes running even after a "hard kill". Now there are very fewer
+    chances for virtual machines to survive ;-)
+  - Depending on PIDs usage, the uptime information returned by vlist could be
+    incorrect.  Uptime has now been completely removed from the output of vlist,
+    as it can be obtained by using the `uptime' command inside virtual machines.
+  - Improved support for Konsole tabs. Better management of stale locks and of
+    simultaneously started virtual machines.
+  - The fuser command is not required any more: it has been replaced by an
+    invocation of lsof.
+  - Missing parameters in netkit.conf are now assigned default values.
+
+2.3
+  - Improved checks for the presence of terminal emulator applications (both in
+    check_configuration.sh and in the Netkit scripts).
+  - Fixed a bug inside vcrash and vclean (wrong signal spec when killing
+    processes broke both vcrash and vclean).
+  - Placed a workaround to avoid early hangs of the port-helper process when
+    booting virtual machines.
+  - Removed some minor warnings issued by vstart and vclean.
+  - Fixed a small bug in the output of vlist.
+
+2.2 Beta
+  - Updated check_configuration.sh (there was no check for the correctness of
+    the PATH environment variable).
+  - Updated INSTALL file.
+
+2.1 Beta
+  - Fixed a bug that prevented correct recognition of running processes (caused
+    vlist and related commands - vcrash, etc. - not to work).
+  - Suppressed a warning popping out when killing a virtual machine having two
+    (or more) network interfaces attached to the same virtual hub.
+  - Fixed minor bug that caused reporting wrong console information when using
+    vlist to get detailed info about a running virtual machine.
+
+2.0 Beta
+  - Netkit now consists of three separate pieces: a "core", a filesystem, and a
+    kernel. Changelogs are maintained separately as well.
+  - Netkit is now documented! The distribution includes a plethora of man pages
+    which guide you throughout Netkit usage and setup.
+  - Introducing a more robust `check_configuration.sh' script, replacing the old
+    `config'.
+  - Environment variable pointing to the Netkit directory has been renamed to
+    NETKIT_HOME (VLAB_HOME is still supported).
+  - Default configuration parameters for newly started virtual machines and, in
+    general, for the Netkit environment, can now be easily altered by editing
+    the netkit.conf file.
+  - All Netkit commands can now limit their scope of action to virtual machines
+    owned (=started) by the desired user.
+  - All Netkit commands are now more robust and provide a clearer output.
+  - Virtual machines can now be configured with network interfaces connected to
+    a real network. This can be done automatically by using an option of the
+    vstart command, which will take care of asking you for the root password
+    when needed.
+  - Network interfaces can now be attached to a running virtual machine ``on the
+    fly'' by using the vconfig command.
+  - The vstart command no longer requires the use of the (very very boring)
+    --new option when starting new virtual machines.
+  - Virtual hubs are automatically stopped when the last machine that uses them
+    quits (no matter whether by graceful halt or by crash).
+  - The vstart command allows the use of alternative UML kernels and filesystems
+    for the virtual machines.
+  - Better management of consoles has been introduced (virtual machine consoles
+    can now be attached to different terminal emulators in a more flexible way).
+    Also, each machine supports two consoles.
+  - Vstart now allows to pass parameters directly to the virtual machine kernel
+    command line.
+  - The vlist command can now be used to ask for detailed information about a
+    running virtual machine.
+  - Vcrash supports different shutdown strategies (by management console or by
+    process signaling). It also allows to remove a virtual machine filesystem
+    upon its crash.
+  - Vhalt now allows to remove a virtual machine filesystem after shutdown.
+  - A new command (vclean) has been introduced to clean the host system from
+    hanging processes and unused virtual hubs. It also allows to remove any
+    configuration settings that have been altered to setup interfaces connected
+    to a real network.
+  - All the ltools now allow to perform operations on a subset of the virtual
+    machines of a lab. This is useful, for example, when only few machines are
+    to be restarted.
+  - Lstart now allows to configure a different amount of emulated memory for
+    each virtual machine.
+  - Lstart now supports an option inside `lab.conf' which can be used to
+    restrict the set of enabled virtual machines for a lab.
+  - A new testing system for the labs has been introduced. It can be used to
+    automatically perform arbitrary checks on a Netkit lab. This is especially
+    useful to ease the distribution of a lab, because it provides with a
+    one-shot solution to test that the lab works properly on a different machine
+    or Netkit distribution.
+  - Something else we may not have mentioned......
+
+
+The following entries describe the changes history for Netkit releases prior to
+Netkit version 2. Consider that, up to this version, changes to the Netkit
+filesystem and to the Netkit kernel were not maintaned separately. 
+
+1.4.2
+  - fixed a (nasty) bug in the UML kernel which caused virtual machines to crash
+    when attempting to write to the host filesystem (i.e., the "/hosthome"
+    directory); this bug caused some of the scripts distributed with Netkit not
+    to work
+  + improved vstart script, which now supports two new options:
+    - "--noxterm", to attach a virtual machine terminal to the current console
+    - "--port", to attach a virtual machine terminal to a telnet port
+  - fixed vcrash script, which killed up the whole world upon crashing a virtual
+    machine without an xterm; also, vcrash now sends SIGCONT before SIGKILL,
+    which tries safely stops hanging processes
+  + filesystem has been updated:
+    - suppressed some other bootup warnings
+    - vim has been installed (no more keyboard tricks are needed... ;)
+
+1.4-1
+  - fixed a bug in the vstart script which did not allow to
+    start machines over existing file systems
+  - made the vlist and vcrash scripts a bit more distribution-compliant
+  - slight speed-up in the lcrash script
+  - the vcrash script now looks for "surviving" processes after machines
+    are crashed, and attempts to kill them
+
+1.4
+  + updated filesystem:
+    - some startup warnings have been fixed
+    - created a valid partition table
+    - enabled console "Home" and "End" keys inside virtual machines
+  - updated uml utilities (now using 20040406 version)
+  - new kernel 2.6.8.1 (uml patch 2.6.8.1-1)
+  - fixed virtual machine crash when using long kernel command lines
+  + improved vstart and lstart scripts:
+    - vstart now suppresses kernel boot messages by default (use "--verbose" to
+      revert to the old behavior)
+    - both vstart and lstart now support up to 30 network interfaces
+  - fixed some problems in locating the 'lsof' command
+
+1.3
+
+  - filesystem defrag
+  - new support for lab scripting lstart, lcrash, ecc.
+  - updated guest startup/shutdown scripts
+  - vstart allows 32MB in the --mem option
+  - vstart creates /tmp/uml, when needed, before creation of the first hub
+
+1.2.5
+  - uml tools updated to fix uml_switch bug
+
+1.2.4
+
+  - vstart now waits for the socket of uml_switch to be created before
+    starting the VM.
+
+1.2.3
+
+  - the vstart script has been changed so that 
+    uml_switch now really works as a hub ("-hub" used)
+
+1.2.1
+  
+  - now vcrash kills also port helper and xterm
+
+1.2
+  
+  - updated filesystem
+  - new kernel 2.4.22 uml patch 5
+  - now the standard uml daemon network devices uses connected sockets so 
+    bridging works without patching the kernel  
+
+1.1

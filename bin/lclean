@@ -1,0 +1,178 @@
+#!/bin/sh
+
+#     Copyright 2002-2009 Stefano Pettini, Fabio Ricci, Massimo Rimondini
+#     Computer Networks Research Group, Roma Tre University.
+#
+#     This file is part of Netkit.
+# 
+#     Netkit is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+# 
+#     Netkit is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+# 
+#     You should have received a copy of the GNU General Public License
+#     along with Netkit.  If not, see <http://www.gnu.org/licenses/>.
+
+# This script can be used to clean up a directory that contains a Netkit lab.
+# All temporary files are removed, including .disk files.
+
+SCRIPTNAME=`basename $0`
+
+# The following line has been introduced to ensure backward compatibility
+: ${NETKIT_HOME:=$VLAB_HOME}
+
+if [ -z "$NETKIT_HOME" ]; then
+   echo 1>&2 "$SCRIPTNAME: The NETKIT_HOME environment variable is not properly set;"
+   echo 1>&2 "please set it as described in the Netkit documentation and try"
+   echo 1>&2 "again."
+   exit 1
+fi
+
+CMDLINE="$0 $*"
+
+. "$NETKIT_HOME/bin/script_utils"
+
+
+# Write to the vcommands log
+logWrite $0 $*
+
+
+# This function is used to print the lclean usage
+help() {
+   echo
+   echo "Usage: $SCRIPTNAME [options] [MACHINE-NAME] ..."
+   cat << END_OF_HELP
+
+This command can be used to clean up a directory containing a Netkit lab. It
+takes care of removing any temporary files, that is, '.ready' files, '.log'
+files, the 'readyfor.test' file as well as virtual machines (COW) filesystems
+('.disk' files). Therefore, any change to the virtual machines filesystems is
+lost. Of course, any persistent part of the lab is preserved, including those
+files that are automatically copied inside virtual machines during the boot
+phase.
+
+Available options are:
+
+  -d DIRECTORY        Clean up the lab inside DIRECTORY. By default, the
+                      cleaning process takes place in the current directory.
+
+This command also supports the following standard options:
+
+  -h, --help          Show this help.
+  -v, --verbose       Show which files are being deleted.
+      --version       Print version information and exit.
+
+The cleaning process involves temporary files generated for any of the virtual
+machines of the lab. If one or more MACHINE-NAMEs are passed on the command
+line, then only those files generated for the matching virtual machines are
+deleted, as well as the 'readyfor.test' file. If any of the MACHINE-NAMEs is
+invalid (i.e., it does not correspond to a virtual machine of the lab), it will
+simply be skipped.
+
+END_OF_HELP
+}
+
+
+# This function checks whether its argument contains spaces
+checkSpaces() {
+   if echo "$1" | grep -q " "; then
+      warning "$SCRIPTNAME" "$CMDLINE" "$0" \
+              "Argument \"$1\" contains spaces. They are not allowed."
+      exit 1
+   fi
+}
+
+
+# Get command line options
+INVALID_OPTION=0
+OPT_LIST="help,version,verbose"
+CMDLINE_OPTIONS=`getopt -ql "$OPT_LIST" -- "hd:v" "$@"`
+if [ $? -gt 0 ]; then
+   INVALID_OPTION=1
+fi
+
+
+# Parse command line options
+parseCmdLine() {
+   while [ $# -gt 0 ]; do
+		CURRENT_ARGUMENT="$1"
+      case "$CURRENT_ARGUMENT" in
+      
+         -d)
+            shift; CURRENT_ARGUMENT="$1"
+            if [ ! -z "$LAB_DIRECTORY" ]; then
+               warning "$SCRIPTNAME" "$CMDLINE" "$0" \
+                  "Multiple directory specifications: where can I find the lab?"
+               exit 1
+            fi
+            LAB_DIRECTORY=`makeAbsolutePath "$CURRENT_ARGUMENT"`;;
+         
+         --help|-h)
+            help
+            exit;;
+            
+         --verbose|-v)
+            VERBOSE=1;;
+         
+         --version)
+            showVersion
+            exit 0;;
+            
+         --)
+            shift
+            break;;
+      esac
+      shift
+   done
+   
+   while [ $# -gt 0 ]; do
+      checkSpaces "$1"
+      VHOSTLIST="$VHOSTLIST $1"
+      shift
+   done
+}
+eval parseCmdLine $CMDLINE_OPTIONS
+
+
+# Check whether user gave some strange options
+if [ $INVALID_OPTION -eq 1 ]; then
+   warning "$SCRIPTNAME" "$CMDLINE" "$0" "Invalid option or missing option parameter."
+   exit 1
+fi
+
+# If no lab directory has been given, assume current directory
+LAB_DIRECTORY=${LAB_DIRECTORY:-${PWD}}
+. "$NETKIT_HOME/bin/lcommon"
+
+# Check that the lab directory exists
+if [ ! -d "$LAB_DIRECTORY" ]; then
+   warning "$SCRIPTNAME" "$CMDLINE" "$0" "Lab directory ($LAB_DIRECTORY) does not exist."
+   exit 1
+fi
+
+# Check whether path to the lab directory contains spaces
+if containsRegexp LAB_DIRECTORY " "; then
+   warning "$SCRIPTNAME" "$CMDLINE" "$0" \
+            "Invalid lab directory: \"$LAB_DIRECTORY\" (path contains spaces)."
+   exit 1
+fi
+
+
+# Print some information about the lab
+echo
+becho "====================== Cleaning up lab =========================="
+labWelcome
+becho "================================================================="
+
+# Clean up the lab directory
+labClean
+echo
+becho "Cleaning completed."
+becho "================================================================="
+
+echo

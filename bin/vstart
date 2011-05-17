@@ -1,0 +1,721 @@
+#!/bin/sh
+
+#     Copyright 2002-2009 Maurizio Patrignani, Maurizio Pizzonia, Fabio Ricci,
+#     Massimo Rimondini - Computer Networks Research Group, Roma Tre University.
+#
+#     This file is part of Netkit.
+# 
+#     Netkit is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+# 
+#     Netkit is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+# 
+#     You should have received a copy of the GNU General Public License
+#     along with Netkit.  If not, see <http://www.gnu.org/licenses/>.
+
+# This is the Netkit vstart script, which is used to start virtual machines with
+# given parameters.
+
+SCRIPTNAME=`basename $0`
+
+# The following line has been introduced to ensure backward compatibility
+: ${NETKIT_HOME:=$VLAB_HOME}
+
+if [ -z "$NETKIT_HOME" ]; then
+   echo 1>&2 "$SCRIPTNAME: The NETKIT_HOME environment variable is not properly set;"
+   echo 1>&2 "please set it as described in the Netkit documentation and try"
+   echo 1>&2 "again."
+   exit 1
+fi
+
+CMDLINE="$0 $*"
+
+. "$NETKIT_HOME/bin/script_utils"
+
+# Write to the vcommands log
+logWrite $0 $*
+
+
+# This function is used to print the vstart usage
+help() {
+   echo
+   echo "Usage: $SCRIPTNAME [options] MACHINE-NAME"
+   cat << END_OF_HELP
+
+This script can be used to start a virtual machine named MACHINE-NAME with a
+given configuration. You can use the following options to adjust the virtual
+machine parameters:
+
+      --ethN=DOMAIN     Equip virtual machine with a network interface ethN,
+END_OF_HELP
+   echo "                        where N is a number between 0 and $(($MAX_INTERFACES-1)). DOMAIN is the name"
+   cat << END_OF_HELP
+                        of the collision domain the interface should be
+                        connected to. The special name "tap" is reserved: when
+                        connecting an interface to the "tap" domain, an external
+                        network can be reached through this interface. A "tap"
+                        collision domain must be declared with the following
+                        syntax:
+                        --ethN=tap,TAP_ADDRESS,GUEST_ADDRESS
+                        where TAP_ADDRESS is the IP address of the host side
+                        of the interface and GUEST_ADDRESS is the IP address of
+                        the interface inside the virtual machine. TAP_ADDRESS
+                        and GUEST_ADDRESS must be on the same (sub)network
+                        which, in turn, must not exist on your host network.
+                        Notices:
+                        - Using "tap" domains performs host-side operations with
+                          administrative privileges. The script will take care
+                          of asking you for the root password if and when
+                          required.
+                        - TAP_ADDRESS is mandatory, but is only taken into
+                          account when a "tap" collision domain is first used.
+                          The script only uses one "tap" collision domain for
+                          each user on the host machine.
+                        - Host-side configurations are not automatically removed
+                          when halting machines: you should use the vclean
+                          script instead.
+                        Please read the Netkit documentation before using "tap"
+                        collision domains.
+  -k, --kernel=FILENAME Use FILENAME as kernel for the virtual machine. FILENAME
+                        must be a UML kernel. Default kernel is:
+END_OF_HELP
+   echo "                        $VM_KERNEL"
+   cat << END_OF_HELP
+  -M, --mem=MEM         Set the amount of RAM for the virtual machine to MEM MB.
+END_OF_HELP
+   echo "                        Allowed amounts span from $MIN_MEM MB to $MAX_MEM MB, defaulting to $VM_MEMORY MB."
+   cat << END_OF_HELP
+
+Filesystem settings can be tuned by using the following options:
+   
+  -H, --no-hosthome         Do not mount host filesystem inside the virtual machine.
+  -m, --model-fs=FILENAME   Use the filesystem stored in FILENAME as a model
+                            filesystem for the virtual machine. FILENAME will not
+                            be altered in any way, unless you use the --no-cow
+                            option (see below). Default model filesystem is:
+END_OF_HELP
+   echo "                            $VM_MODEL_FS"
+   cat << END_OF_HELP
+  -f, --filesystem=FILENAME Use FILENAME as a filesystem for the virtual machine.
+                            By default, file MACHINE-NAME.disk is used. Do not
+                            use this option in conjunction with --no-cow.
+  -D, --hide-disk-file      Hide the virtual machine filesystem (.disk file). The
+                            virtual machine will continue to operate normally. Do
+                            not use this option in conjunction with --no-cow.
+  -W, --no-cow              Avoid using Copy on Write: every change to the virtual
+                            machine filesystem is applied directly to the model
+                            filesystem. Do NOT use this option unless you actually know
+                            what you are doing!
+
+Console settings can be altered by the following options:
+
+      --con0=MODE
+      --con1=MODE       Attach the virtual machine primary (con0) and secondary
+                        (con1) consoles to different devices or terminal
+                        emulators. Allowed values for MODE are:
+                          xterm      attach to a terminal emulator application
+                          this       attach to stdin/stdout (i.e., use current
+                                     terminal; only one console at a time can
+                                     be set to "this" mode)
+                          pty        attach to a pseudo-terminal
+                          port:xxx   attach to TCP port xxx
+                          none       disable console (only valid with con1)
+END_OF_HELP
+   echo "                        Default mode for con0 is ${VM_CON0}."
+   echo "                        Default mode for con1 is ${VM_CON1}."
+   cat << END_OF_HELP
+      --xterm=TYPE      Instead of the standard xterm, use another terminal
+                        emulator application. The following values are supported:
+                          gnome        use the Gnome Desktop gnome-terminal
+                          konsole      use the KDE Desktop Environment konsole
+                          konsole-tab  same as above, but different virtual
+                                       machines are opened in different konsole
+                                       tabs of the same window
+                          xterm        use the standard xterm                          
+                          
+
+If you want to set up a lab, you are probably interested in the following
+options:
+
+  -e, --exec=FILENAME   Run a specified command or script inside the virtual
+                        machine during the boot phase.
+  -l, --hostlab=DIR     Tell the virtual machine that the base directory for a
+                        laboratory is DIR.
+  -w, --hostwd=DIR      Set the lab working directory to DIR.
+
+Other options are:
+
+      --append=PARAM    Append additional kernel command line parameters when
+                        running the virtual machine kernel; PARAM can also be a
+                        pair OPTION=VALUE. This option can be used multiple
+                        times. Parameters will be passed to the kernel in the
+                        same order in which they are provided.
+  -F, --foreground      Do not launch the virtual machine in background (the
+                        latter being the default behavior). Note that virtual
+                        hubs are always started in background, regardless of
+                        this option. This is the default when using --con0=this
+                        or --con1=this.
+  -h, --help            Show this help.
+  -p, --print           Do not actually start anything. Just show which commands
+                        would be executed.
+  -q, --quiet           Quiet mode (suppress any output except errors and
+                        warnings).
+  -v, --verbose         Tell the virtual machine kernel to report verbose
+                        messages during boot.
+      --version         Print version information and exit.
+
+Notice: unless differently stated, space characters are not allowed in any of
+the command line arguments. They are also prohibited inside path names,
+including the path to the current directory at the time vstart is invoked.
+This means that vstart cannot be launched when the path to the current directory
+contains spaces.
+
+END_OF_HELP
+}
+
+
+# Get command line options
+INVALID_OPTION=0
+OPT_LIST="kernel:,mem:,model-fs:,filesystem:,con0:,con1:,exec:"
+OPT_LIST="${OPT_LIST},hostlab:,hostwd:,append:,foreground,help,hide-disk-file"
+OPT_LIST="${OPT_LIST},no-cow,print,verbose,no-hosthome"
+OPT_LIST="${OPT_LIST},quiet,version,test,xterm:"
+i=0
+while [ $i -lt $MAX_INTERFACES ]; do
+   OPT_LIST="${OPT_LIST},eth$i:"
+	i=$(($i + 1))
+done
+CMDLINE_OPTIONS=`getopt 2>&1 -ql "$OPT_LIST" -- "k:M:m:f:e:l:w:FhHLWpqvD" "$@"`
+if [ $? -gt 0 ]; then
+   INVALID_OPTION=1
+fi
+
+
+# Parse command line options
+parseCmdLine() {
+   local CURRENT_ARGUMENT
+   while [ $# -gt 0 ]; do
+      CURRENT_ARGUMENT="$1"
+      case "$CURRENT_ARGUMENT" in
+      
+         --eth*)
+            ETH_INTERFACES="${ETH_INTERFACES} ${CURRENT_ARGUMENT#--}="
+            shift; CURRENT_ARGUMENT="$1"
+            if containsRegexp CURRENT_ARGUMENT "_"; then
+               warning "$SCRIPTNAME" "$CMDLINE" "$0" \
+                       "Invalid collision domain: $CURRENT_ARGUMENT (underscores are are not allowed)."
+               exit 1
+            fi
+            if containsRegexp CURRENT_ARGUMENT "," || containsRegexp CURRENT_ARGUMENT "\\."; then
+               if [ "${CURRENT_ARGUMENT#tap,}" = "$CURRENT_ARGUMENT" ]; then
+                  # This is not a special hub, but its name contains a comma
+                  warning "$SCRIPTNAME" "$CMDLINE" "$0" \
+                        "Invalid collision domain: $CURRENT_ARGUMENT (commas and dots are only allowed for Internet connected collision domains)."
+                  exit 1
+               fi
+            fi
+            
+            if [ "x$CURRENT_ARGUMENT" = "x" ]; then
+               warning "$SCRIPTNAME" "$CMDLINE" "$0" \
+                       "Collision domain name is missing."
+               exit 1
+            fi
+            checkSpaces "$CURRENT_ARGUMENT"
+            ETH_INTERFACES="${ETH_INTERFACES}${CURRENT_ARGUMENT}" ;;
+
+         --kernel|-k)
+            shift; CURRENT_ARGUMENT="$1"
+            checkSpaces "$CURRENT_ARGUMENT"
+            VM_KERNEL=`makeAbsolutePath $CURRENT_ARGUMENT`;;
+         
+         --mem|-M)
+            shift; CURRENT_ARGUMENT="$1"
+            VM_MEMORY="$CURRENT_ARGUMENT"
+            if [ $(($VM_MEMORY)) -lt $MIN_MEM -o $(($VM_MEMORY)) -gt $MAX_MEM ]; then
+               warning "$SCRIPTNAME" "$CMDLINE" "$0" \
+                       "Memory out of allowed range: ${VM_MEMORY} MB (min: ${MIN_MEM}; max: ${MAX_MEM})."
+               exit 1
+            fi;;
+         
+         --model-fs|-m)
+            shift; CURRENT_ARGUMENT="$1"
+            checkSpaces "$CURRENT_ARGUMENT"
+            if containsRegexp CURRENT_ARGUMENT ","; then
+               warning "$SCRIPTNAME" "$CMDLINE" "$0" \
+                       "Invalid filesystem name: $CURRENT_ARGUMENT (commas are not allowed)."
+               exit 1
+            fi
+            if [ "x$CURRENT_ARGUMENT" = "x" ]; then
+               warning "$SCRIPTNAME" "$CMDLINE" "$0" \
+                       "Model filesystem name is missing."
+               exit 1
+            fi
+            VM_MODEL_FS=`makeAbsolutePath $CURRENT_ARGUMENT`;;
+
+         --filesystem|-f)
+            shift; CURRENT_ARGUMENT="$1"
+            checkSpaces "$CURRENT_ARGUMENT"
+            if containsRegexp CURRENT_ARGUMENT ","; then
+               warning "$SCRIPTNAME" "$CMDLINE" "$0" \
+                       "Invalid filesystem name: $CURRENT_ARGUMENT (commas are not allowed)."
+               exit 1
+            fi
+            if [ "x$CURRENT_ARGUMENT" = "x" ]; then
+               warning "$SCRIPTNAME" "$CMDLINE" "$0" \
+                       "Filesystem name is missing."
+               exit 1
+            fi
+            VM_FS=`makeAbsolutePath $CURRENT_ARGUMENT`;;
+
+         --con0)
+            shift; CURRENT_ARGUMENT="$1"
+            checkSpaces "$CURRENT_ARGUMENT"
+            case "$CURRENT_ARGUMENT" in
+               xterm|this|pty|port:*|none)   VM_CON0=$CURRENT_ARGUMENT;;
+               *)
+                  warning "$SCRIPTNAME" "$CMDLINE" "$0" \
+                          "Unrecognized device for con0: $CURRENT_ARGUMENT."
+                  exit 1;;
+            esac ;;
+
+         --con1)
+            shift; CURRENT_ARGUMENT="$1"
+            checkSpaces "$CURRENT_ARGUMENT"
+            case "$CURRENT_ARGUMENT" in
+               xterm|this|pty|port:*|none)   VM_CON1=$CURRENT_ARGUMENT;;
+               *)
+                  warning "$SCRIPTNAME" "$CMDLINE" "$0" \
+                          "Unrecognized device for con1: $CURRENT_ARGUMENT."
+                  exit 1;;
+            esac ;;
+
+         --exec|-e)
+            shift; CURRENT_ARGUMENT="$1"
+            VM_EXEC="$CURRENT_ARGUMENT";;
+
+         --hostlab|-l)
+            shift; CURRENT_ARGUMENT="$1"
+            checkSpaces "$CURRENT_ARGUMENT"
+            VM_HOSTLAB=$CURRENT_ARGUMENT;;
+            
+         --hostwd|-w)
+            shift; CURRENT_ARGUMENT="$1"
+            checkSpaces "$CURRENT_ARGUMENT"
+            VM_HOSTWD=$CURRENT_ARGUMENT;;
+            
+         --append)
+            shift; CURRENT_ARGUMENT="$1"
+            checkSpaces "$CURRENT_ARGUMENT"
+            KERNEL_APPEND="$KERNEL_APPEND $CURRENT_ARGUMENT";;
+            
+         -F|--foreground)
+            RUN_IN_FOREGROUND=1;;
+            
+         --help|-h)
+            help
+            exit;;
+
+         --no-hosthome|-H)
+            NO_HOSTHOME=1;;
+            
+         --no-cow|-W)
+            USE_MODEL_FS=1;;
+            
+         -D|--hide-disk-file)
+            REMOVE_FS=1;;
+         
+         -q|--quiet)
+            BE_QUIET=1;;
+            
+         --print|-p)
+            JUST_PRINT=1;;
+            
+         --verbose|-v)
+            VERBOSE=1;;                  
+         
+         --xterm)
+            if [ ! -z "$ASSIGNED_TERM_TYPE" ]; then
+               warning "$SCRIPTNAME" "$CMDLINE" "$0" \
+                        "Duplicate specification of the terminal emulator application: $CURRENT_ARGUMENT."
+               exit 1
+            fi
+            shift; CURRENT_ARGUMENT="$1"
+            checkSpaces "$CURRENT_ARGUMENT"
+            case "$CURRENT_ARGUMENT" in
+               konsole|konsole-tab|gnome|xterm)
+                  ASSIGNED_TERM_TYPE=1
+                  TERM_TYPE=$CURRENT_ARGUMENT;;
+               *)
+                  warning "$SCRIPTNAME" "$CMDLINE" "$0" \
+                          "Unsupported terminal emulator application: $CURRENT_ARGUMENT."
+                  exit 1;;
+            esac;;
+         
+         --version)
+            showVersion
+            exit 0;;
+            
+         # --test is required by the lab test scripts in order to work properly
+         --test)
+            KERNEL_APPEND="$KERNEL_APPEND test";;
+         
+         --)
+            shift
+            break;;
+      esac
+      shift
+   done
+
+   # Parse virtual machine name   
+   while [ $# != 0 ]; do
+      if [ ! -z "$VM_NAME" ]; then
+         warning "$SCRIPTNAME" "$CMDLINE" "$0" "Too many arguments: $*"
+         exit 1
+      fi
+      checkSpaces "$1"
+      VM_NAME=$1
+      
+      shift
+   done
+}
+eval parseCmdLine $CMDLINE_OPTIONS
+
+# Check whether user gave some strange options
+if [ "$INVALID_OPTION" -eq 1 ]; then
+   warning "$SCRIPTNAME" "$CMDLINE" "$0" "Invalid option or missing option parameter (or maybe out of range network interfaces)."
+   exit 1
+fi
+
+# Check whether user is trying to attach more than one console to stdin/stdout
+if [ $VM_CON0 = "this" -a $VM_CON1 = "this" ]; then
+   warning "$SCRIPTNAME" "$CMDLINE" "$0" "Only one console can be attached to the current terminal."
+   exit 1
+fi
+
+# Check whether a COW filesystem has been explictly provided when using the --no-cow option
+if [ ! -z "$USE_MODEL_FS" -a ! -z "$VM_FS" ]; then
+   warning "$SCRIPTNAME" "$CMDLINE" "$0" "You cannot use the --no-cow option when explicitly providing a filesystem name."
+   exit 1
+fi   
+
+# Check whether the user asked to hide the virtual machine filesystem while using the --no-cow option
+if [ ! -z "$REMOVE_FS" -a ! -z "$USE_MODEL_FS" ]; then
+   warning "$SCRIPTNAME" "$CMDLINE" "$0" "You cannot hide the filesystem when using use the --no-cow option."
+   exit 1
+fi
+
+# Check whether virtual machine name is missing
+if [ -z "$VM_NAME" ]; then
+   warning "$SCRIPTNAME" "$CMDLINE" "$0" "Virtual machine name is missing."
+   exit 1
+fi
+
+# Check whether the path to the current directory contains spaces
+if containsRegexp PWD " "; then
+   warning "$SCRIPTNAME" "$CMDLINE" "$0" "Path to the current directory contains spaces. Please move to a different directory."
+   exit 1
+fi
+
+# Check wh
+
+# Check whether the requested terminal emulator application exists
+if [ $VM_CON0 = "xterm" -o $VM_CON1 = "xterm" ]; then
+   # Look for user specified terminal application or, if none has been specified,
+   # search for the standard xterm.
+   TERMINAL_APPLICATION=${TERM_TYPE:-xterm}
+   [ $TERMINAL_APPLICATION = "konsole-tab" ] && TERMINAL_APPLICATION=konsole
+   [ $TERMINAL_APPLICATION = "gnome" ] && TERMINAL_APPLICATION=gnome-terminal
+   if ! which $TERMINAL_APPLICATION > /dev/null 2>&1; then
+      warning "$SCRIPTNAME" "$CMDLINE" "$0" \
+               "Terminal emulator \"$TERMINAL_APPLICATION\" appears not to be available. Please install it or use --xterm."
+      exit 1
+   fi
+fi
+
+
+# This function prepares network interfaces for use.
+setupInterfaces() {
+   local DEVICE HUB_NAME HUB_SOCKET FIRSTLINE IF_CMDLINE CHECK_TAP TAP_ADDRESS
+   local GUEST_ADDRESS ENABLED_DEFAULT_ROUTE USED_DEVICES
+   FIRSTLINE=1
+   while [ $# -gt 0 ]; do
+      # Using a double percent (%%) allows to tolerate situations in which
+      # virtual hub names include an equal sign (=)
+      DEVICE=${1%%=*}
+      # Using a single hash (#) allows to tolerate situations in which
+      # virtual hub names include an equal sign (=)
+      HUB_NAME=${1#*=}
+      if [ "${HUB_NAME}" = "tap" ]; then
+         echo 1>&2
+         warning "$SCRIPTNAME" "$CMDLINE" "$0" "Invalid tap collision domain specification: \"$1\"."
+         exit 1
+      fi
+      if containsRegexp HUB_NAME "tap,"; then
+         # This is an Internet connected (i.e., "tap") collision domain
+         CHECK_TAP=`echo $HUB_NAME | awk -v FS="," \
+            '
+               {
+                  if (NF!=3 ||
+                      !match($2,"^[0-9]+\\\.[0-9]+\\\.[0-9]+\\\.[0-9]+$") ||
+                      !match($3,"^[0-9]+\\\.[0-9]+\\\.[0-9]+\\\.[0-9]+$"))
+                     print 0
+                  else {
+                     print "HUB_NAME=tap"
+                     print "TAP_ADDRESS=" $2
+                     print "GUEST_ADDRESS=" $3
+                  }
+               }
+            '`
+         if [ "x$CHECK_TAP" = "x0" ]; then
+            echo 1>&2
+            warning "$SCRIPTNAME" "$CMDLINE" "$0" "Invalid tap collision domain specification: \"$1\"."
+            exit 1
+         else
+            eval "$CHECK_TAP"
+         fi
+      else
+         # This is a normal (i.e., not "tap") collision domain
+         TAP_ADDRESS=""
+         GUEST_ADDRESS=""
+      fi
+      
+      HUB_SOCKET="${HUB_SOCKET_DIR}/${HUB_SOCKET_PREFIX}_${USERID}_${HUB_NAME}${HUB_SOCKET_EXTENSION}"
+      
+      if [ $FIRSTLINE != 1 ]; then
+         [ -z "$BE_QUIET" ] && echo -n "               "
+      fi
+      [ -z "$BE_QUIET" ] && echo "${DEVICE} @ ${HUB_NAME}\t(${HUB_SOCKET})"
+
+      if containsRegexp USED_DEVICES " ${DEVICE} "; then
+         warning "$SCRIPTNAME" "$CMDLINE" "$0" "Duplicate interface: $DEVICE."
+         exit 1
+      fi
+      
+      KERNELCMD="$KERNELCMD $DEVICE=daemon,,,$HUB_SOCKET"
+      # Remember that this network interface is in use
+      USED_DEVICES="${USED_DEVICES} ${DEVICE} "
+      
+      if [ ! -z "$TAP_ADDRESS" ]; then
+         HUBLIST="$HUBLIST $HUB_SOCKET,$TAP_ADDRESS,$GUEST_ADDRESS"
+         KERNELCMD="$KERNELCMD autoconf_$DEVICE=$GUEST_ADDRESS"
+         if [ -z "$ENABLED_DEFAULT_ROUTE" ]; then
+            # Ensure the default route is specified only once.
+            KERNELCMD="$KERNELCMD def_route=$TAP_ADDRESS"
+            ENABLED_DEFAULT_ROUTE=1
+         fi
+      else
+         HUBLIST="$HUBLIST $HUB_SOCKET"
+      fi
+
+      FIRSTLINE=0
+      shift
+   done
+}
+
+
+
+################## Building kernel command line ##################
+
+: ${VM_FS:="${PWD}/${VM_NAME}.disk"}
+KERNELCMD="$VM_KERNEL"
+
+if [ -z "$BE_QUIET" ]; then
+   echo
+   echo
+   echo "============= Starting virtual machine \"$VM_NAME\" ============="
+   echo "   Kernel:     $VM_KERNEL"
+fi
+
+
+##### Setup kernel modules directory
+eval KERNEL_MODULES_DIRECTORY=`dirname $VM_KERNEL`/modules
+if [ -d $KERNEL_MODULES_DIRECTORY ]; then
+   [ -z "$BE_QUIET" ] && echo "   Modules:    $KERNEL_MODULES_DIRECTORY"
+   KERNELCMD="$KERNELCMD modules=$KERNEL_MODULES_DIRECTORY"
+fi
+
+
+##### Set virtual machine name
+KERNELCMD="$KERNELCMD name=$VM_NAME title=$VM_NAME umid=$VM_NAME"
+
+
+##### Set memory amount
+[ -z "$BE_QUIET" ] && echo "   Memory:     ${VM_MEMORY} MB"
+VM_MEMORY=$(($VM_MEMORY + $VM_MEMORY_SKEW))
+KERNELCMD="$KERNELCMD mem=${VM_MEMORY}M"
+
+
+##### Filesystem settings
+[ -z "$BE_QUIET" ] && echo "   Model fs:   $VM_MODEL_FS"
+if [ ! -z "$USE_MODEL_FS" ]; then
+   # Use model fs as virtual machine filesystem (do not use COW)
+   KERNELCMD="$KERNELCMD ubd0=$VM_MODEL_FS"
+   VM_FS="$VM_MODEL_FS"
+   [ -z "$BE_QUIET" ] && echo "   Filesystem: using model fs (no COW)"
+else
+   [ -z "$BE_QUIET" ] && echo -n "   Filesystem: $VM_FS"
+   # Explicitly declaring the model fs name is redundant after the COW
+   # file has been created. Nevertheless, this is needed in order to later
+   # get information about the virtual machine (i.e., by using vlist)
+   KERNELCMD="$KERNELCMD ubd0=${VM_FS},${VM_MODEL_FS}"
+   if [ ! -f "$VM_FS" ]; then
+      [ -z "$BE_QUIET" ] && echo " (new)"
+   else
+      [ -z "$BE_QUIET" ] && echo
+   fi
+fi
+
+# Append a boot option that specifies the root filesystem
+KERNELCMD="$KERNELCMD root=98:1"
+# The following root= options should also be valid
+# KERNELCMD="$KERNELCMD root=/dev/ubd/disc0/part1"
+# KERNELCMD="$KERNELCMD root=/dev/ubda1"
+
+
+##### Setup mconsole directory
+KERNELCMD="$KERNELCMD uml_dir=$MCONSOLE_DIR"
+
+
+##### Setup network interfaces
+if [ ! -z "$ETH_INTERFACES" ]; then
+   [ -z "$BE_QUIET" ] && echo -n "   Interfaces: "
+   eval setupInterfaces $ETH_INTERFACES
+fi
+
+##### Set HOSTHOME
+if [ -z "$NO_HOSTHOME" ]; then
+   KERNELCMD="$KERNELCMD hosthome=${HOME}"
+   [ -z "$BE_QUIET" ] && echo "   Hostfs at:  $HOME"
+fi
+
+
+##### Append any other user provided parameters
+if [ ! -z "$KERNEL_APPEND" ]; then
+   KERNELCMD="$KERNELCMD $KERNEL_APPEND"
+   [ -z "$BE_QUIET" ] && echo "   Other args:$KERNEL_APPEND"
+fi
+
+
+##### Check whether virtual machine already exists
+if [ -z "$JUST_PRINT" ] && getVMinfoByName "$USERID" "$VM_NAME"; then
+   echo 1>&2 "${SCRIPTNAME}: Virtual machine \"$VM_NAME\" is already running. Please"
+   echo 1>&2 "halt it before starting a new one or use a different virtual machine name."
+   exit 1
+fi
+
+
+##### Check whether filesystem is already in use
+if [ -z "$JUST_PRINT" -a -e "$VM_FS" ]; then
+   if someOneUses "$VM_FS"; then
+      echo 1>&2 "${SCRIPTNAME}: Filesystem $VM_FS is already in use. Please use a"
+      echo 1>&2 "different filesystem or virtual machine name."
+      exit 1
+   fi
+fi
+
+
+##### Append exec, hostlab and hostwd parameters, if any
+if [ ! -z "$VM_EXEC" ]; then
+   [ -z "$BE_QUIET" ] && echo "   Boot cmd:   \"$VM_EXEC\""
+   KERNELCMD="$KERNELCMD exec=\"$VM_EXEC\""
+fi
+if [ ! -z "$VM_HOSTLAB" ]; then
+   [ -z "$BE_QUIET" ] && echo "   Hostlab at: $VM_HOSTLAB"
+   KERNELCMD="$KERNELCMD hostlab=$VM_HOSTLAB"
+fi
+if [ ! -z "$VM_HOSTWD" ]; then
+   [ -z "$BE_QUIET" ] && echo "   Host WD at: $VM_HOSTWD"
+   KERNELCMD="$KERNELCMD hostwd=$VM_HOSTWD"
+fi
+
+
+##### Set verbosity parameter
+if [ -z "$VERBOSE" ]; then
+   KERNELCMD="$KERNELCMD quiet"
+fi
+
+
+##### Bypass port helper, if required (only allowed for the primary terminal)
+if [ $VM_CON0 = "xterm" -a "$CON0_PORTHELPER" != "yes" ]; then
+   case "$TERM_TYPE" in
+      konsole)       KERNELCMD="konsole --nofork --title $VM_NAME -e $KERNELCMD";;
+      konsole-tab)   KERNELCMD="$NETKIT_HOME/bin/konsole-tabs.sh -e $KERNELCMD";;
+      gnome)         KERNELCMD="gnome-terminal --disable-factory -x $KERNELCMD";;
+      *)             KERNELCMD="xterm -e $KERNELCMD";;
+   esac
+   VM_CON0="this_noporthelper"
+fi
+
+
+##### Attach terminals
+case $VM_CON0 in
+   none)    KERNELCMD="$KERNELCMD con0=null";;
+   xterm)   KERNELCMD="$KERNELCMD con0=xterm";;
+   this|this_noporthelper)    KERNELCMD="$KERNELCMD con0=fd:0,fd:1";;
+   pty)     KERNELCMD="$KERNELCMD con0=pty";;
+   port:*)  KERNELCMD="$KERNELCMD con0=${VM_CON0}";;
+esac
+case $VM_CON1 in
+   none)    KERNELCMD="$KERNELCMD con1=null";;
+   xterm)   KERNELCMD="$KERNELCMD con1=xterm";;
+   this)    KERNELCMD="$KERNELCMD con1=fd:0,fd:1";;
+   pty)     KERNELCMD="$KERNELCMD con1=pty";;
+   port:*)  KERNELCMD="$KERNELCMD con1=${VM_CON1}";;
+esac
+
+
+
+##### Disable SELinux
+KERNELCMD="$KERNELCMD SELINUX_INIT=0"
+
+
+##### Setup a proper terminal emulator, if asked to
+if [ ! -z "$TERM_TYPE" ]; then
+   case "$TERM_TYPE" in
+      konsole)
+         KERNELCMD="$KERNELCMD xterm=konsole,-T,-e";;
+      konsole-tab)
+         KERNELCMD="$KERNELCMD xterm=$NETKIT_HOME/bin/konsole-tabs.sh,-T,-e";;
+      gnome)
+         KERNELCMD="$KERNELCMD xterm=gnome-terminal,-t,-x";;
+      xterm) ;;
+   esac
+fi
+
+
+[ -z "$BE_QUIET" ] && echo
+
+##### Actually start network hubs
+eval runHubs $HUBLIST
+
+##### Prepare the cleanHubs function for execution after a virtual machine stops
+export cleanHubs
+
+#### Actually start virtual machine
+if [ -z "$RUN_IN_FOREGROUND" -a "$VM_CON0" != "this" -a "$VM_CON1" != "this" ]; then
+   BACKGROUND="&"
+fi
+
+### Invocation of uml_mconsole is needed in order to "wake up" port-helper if
+### it ever hangs when booting the virtual machine.
+WAKEUP_PORTHELPER=""
+if [ "$CON0_PORTHELPER" = "yes" ]; then
+   WAKEUP_PORTHELPER="{ sleep 5; $NETKIT_HOME/bin/uml_mconsole $VM_NAME help > /dev/null 2>&1; } &"
+fi
+
+### Remove .disk file, if requested
+if [ ! -z "$REMOVE_FS" ]; then
+   REMOVE_FS_COMMAND="{ while [ ! -f $VM_FS ]; do sleep 1; done; rm -f $VM_FS; } &"
+fi
+
+### Completely hide primary console, if requested to
+if [ "$VM_CON0" = "none" ]; then
+   REDIRECT_CONSOLE=">/dev/null 2>&1"
+fi
+
+run_command "$JUST_PRINT" "$KERNELCMD" "{ $WAKEUP_PORTHELPER $REMOVE_FS_COMMAND $KERNELCMD; cleanHubs $HUBLIST; } $REDIRECT_CONSOLE $BACKGROUND"

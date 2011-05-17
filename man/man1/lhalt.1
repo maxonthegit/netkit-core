@@ -1,0 +1,133 @@
+.TH LHALT 1 "November 2009" "" Netkit
+.SH NAME
+lhalt \- halt machines of a netkit lab
+.SH SYNOPSIS
+\fBlhalt\fR [options] [\fIMACHINE\-NAME\fR...]
+
+
+\" ########################################
+
+.SH DESCRIPTION
+The \fIlhalt\fR command can be used to gracefully shut down virtual machines of
+a Netkit lab. \fIlhalt\fR makes use of \fBvhalt\fR to halt virtual machines (see
+\fBvhalt\fR(1)).
+
+By default, \fIvhalt\fR stops all the virtual machines of the lab. If a list of
+\fIMACHINE\-NAME\fRs is provided, then only virtual machines with a
+matching name \fIand\fR that are part of the lab will be halted.
+
+The following options are supported by \fIlhalt\fR:
+.TP
+.B
+\-d \fIDIRECTORY\fR
+Halt the Netkit lab that is located inside \fIDIRECTORY\fR. If no \fB\-d\fR
+option is provided, \fIlhalt\fR assumes that the lab is located in the
+current directory. The path to the lab directory (being that the current
+directory or one provided by \fB\-d\fR) must never contain spaces.
+
+.TP
+.B
+\-l
+.PD 0
+.TP
+.B
+\-\-list
+Show a list of currently running virtual machines after the lab has been
+halted. This is useful to check whether all the hosts have been shut down.
+
+.TP
+.B
+\-q
+.PD 0
+.TP
+.B
+\-\-quick
+.PD 0
+.TP
+.B
+\-\-quiet
+This option prevents \fIlhalt\fR from checking whether virtual machines have
+properly halted. Hence, it speeds up the halt process. Notice that, unlike
+\fBlcrash\fR (see \fBlcrash\fR(1)), a shutdown fails or succeeds regardless of
+the use of this option (i.e., no benefit is gained from retrying without this
+option). This option slightly reduces the output of \fIlhalt\fR as well.
+.br
+This option is incompatible with \fB\-r\fR or \fB\-\-remove\-fs\fR.
+
+.TP
+.B
+\-r
+.PD 0
+.TP
+.B
+\-\-remove-fs
+Delete virtual machines (COW) filesystems (.disk files) after halting the
+corresponding machines.
+Default action is to keep the filesystems, so that the lab can be restarted while
+preserving filesystem contents.
+.br
+Using this option never affects the model filesystem. This option is incompatible
+with \fB\-q\fR (\fB\-\-quick\fR, \fB\-\-quiet\fR).
+
+See the README in the Netkit filesystem package for information about COW and
+model filesystems.
+
+
+.PP
+The following standard options are also supported.
+
+.TP
+.B
+\-h
+.PD 0
+.TP
+.B
+\-\-help
+Show usage information.
+
+.TP
+.B
+\-\-version
+Print information about the installed Netkit release and the host kernel version
+and exit. If ``\fI<unavailable>\fR'' is printed instead of a version number,
+then the corresponding information could not be retrieved (for example because
+a non-standard Netkit kernel or filesystem is being used).
+
+
+
+
+\" ########################################
+
+.SH "ENVIRONMENT VARIABLES"
+
+All Netkit commands require that the \fBNETKIT_HOME\fR variable contains the
+name of the directory Netkit is installed in.
+
+Apart from this, \fIlhalt\fR supports no other environment variables.
+
+
+\" ########################################
+
+.SH "SEE ALSO"
+\fIlstart\fR(1),
+\fIlclean\fR(1),
+\fIlcrash\fR(1),
+\fIlrestart\fR(1),
+\fIlinfo\fR(1),
+\fIltest\fR(1),
+\fIvhalt\fR(1),
+Netkit filesystem README.
+
+
+\" ########################################
+   
+.SH AUTHOR
+
+\fIlhalt\fR script: Stefano Pettini, Massimo Rimondini
+.br
+This man page: Fabio Ricci, Massimo Rimondini
+
+
+\" ########################################
+
+.so include/bugreport.man

@@ -1,0 +1,198 @@
+#!/bin/sh
+
+#     Copyright 2002-2009 Stefano Pettini, Fabio Ricci, Massimo Rimondini
+#     Computer Networks Research Group, Roma Tre University.
+#
+#     This file is part of Netkit.
+# 
+#     Netkit is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+# 
+#     Netkit is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+# 
+#     You should have received a copy of the GNU General Public License
+#     along with Netkit.  If not, see <http://www.gnu.org/licenses/>.
+
+# This script can be used to gracefully halt a Netkit lab. If asked to, it
+# also removes .disk files.
+
+SCRIPTNAME=`basename $0`
+
+# The following line has been introduced to ensure backward compatibility
+: ${NETKIT_HOME:=$VLAB_HOME}
+
+if [ -z "$NETKIT_HOME" ]; then
+   echo 1>&2 "$SCRIPTNAME: The NETKIT_HOME environment variable is not properly set;"
+   echo 1>&2 "please set it as described in the Netkit documentation and try"
+   echo 1>&2 "again."
+   exit 1
+fi
+
+CMDLINE="$0 $*"
+
+. "$NETKIT_HOME/bin/script_utils"
+
+
+# Write to the vcommands log
+logWrite $0 $*
+
+
+# This function is used to print the lhalt usage
+help() {
+   echo
+   echo "Usage: $SCRIPTNAME [options] [MACHINE-NAME] ..."
+   cat << END_OF_HELP
+
+This command gracefully shuts down the virtual machines of a Netkit lab. Halting
+instead of crashing is much slower but preserves virtual machines filesystem
+integrity. Optionally, this command also deletes virtual machines filesystems.
+Depending on the command line being used, it is possible to halt only a subset
+of the virtual machines that make up the lab.
+Available options are:
+
+  -d DIRECTORY        Halt the lab inside DIRECTORY. By default, the lab in
+                      the current directory is halted.
+  -l, --list          Show a list of running virtual machines after halting
+                      the lab.
+  -q, --quick
+      --quiet         Disable checking whether virtual machines have properly
+                      shut down. This quickens the halt process, but no
+                      warnings are raised if a virtual machine is unable to
+                      shut down.
+                      This option slightly reduces the amount of printed
+                      information as well. It cannot be used together with -r.
+  -r, --remove-fs     Delete virtual machines filesystems after halting them.
+                      This never impacts the model filesystem. This option
+                      cannot be used together with -q.
+
+Other standard options are:
+
+  -h, --help          Show this help.
+      --version       Print version information and exit.
+
+If one or more MACHINE-NAMEs are passed on the command line, then only those
+machines will be halted (and their filesystems deleted, if asked to). If any
+of the MACHINE-NAMEs is invalid (i.e., it does not correspond to a virtual
+machine of the lab), it will simply be skipped.
+
+END_OF_HELP
+}
+
+
+# Get command line options
+INVALID_OPTION=0
+OPT_LIST="help,version,remove-fs,quick,quiet,list"
+CMDLINE_OPTIONS=`getopt -ql "$OPT_LIST" -- "hd:lqr" "$@"`
+if [ $? -gt 0 ]; then
+   INVALID_OPTION=1
+fi
+
+
+# Using verbose mode tells vcrash to wait for virtual machines to stop before
+# returning.
+VERBOSE=1
+
+# Parse command line options
+parseCmdLine() {
+   while [ $# -gt 0 ]; do
+		CURRENT_ARGUMENT="$1"
+      case "$CURRENT_ARGUMENT" in
+      
+         -d)
+            shift; CURRENT_ARGUMENT="$1"
+            if [ ! -z "$LAB_DIRECTORY" ]; then
+               warning "$SCRIPTNAME" "$CMDLINE" "$0" \
+                  "Multiple directory specifications: where can I find the lab?"
+               exit 1
+            fi
+            LAB_DIRECTORY=`makeAbsolutePath "$CURRENT_ARGUMENT"`;;
+         
+         --help|-h)
+            help
+            exit;;
+            
+         --remove-fs|-r)
+            REMOVE_FILESYSTEM=1;;
+         
+         --list|-l)
+            LISTVM=1;;
+         
+         --quick|--quiet|-q)
+            unset VERBOSE;;
+         
+         --version)
+            showVersion
+            exit 0;;
+            
+         --)
+            shift
+            break;;
+      esac
+      shift
+   done
+   
+   while [ $# -gt 0 ]; do
+      checkSpaces "$1"
+      VHOSTLIST="$VHOSTLIST $1"
+      shift
+   done
+}
+eval parseCmdLine $CMDLINE_OPTIONS
+
+
+# Check whether user gave some strange options
+if [ $INVALID_OPTION -eq 1 ]; then
+   warning "$SCRIPTNAME" "$CMDLINE" "$0" "Invalid option or missing option parameter."
+   exit 1
+fi
+
+# If no lab directory has been given, assume current directory
+LAB_DIRECTORY=${LAB_DIRECTORY:-${PWD}}
+. "$NETKIT_HOME/bin/lcommon"
+
+# Check that the lab directory exists
+if [ ! -d "$LAB_DIRECTORY" ]; then
+   warning "$SCRIPTNAME" "$CMDLINE" "$0" "Lab directory ($LAB_DIRECTORY) does not exist."
+   exit 1
+fi
+
+# Check whether path to the lab directory contains spaces
+if containsRegexp LAB_DIRECTORY " "; then
+   warning "$SCRIPTNAME" "$CMDLINE" "$0" \
+            "Invalid lab directory: \"$LAB_DIRECTORY\" (path contains spaces)."
+   exit 1
+fi
+
+# Filesystem cannot be removed if we are working in quiet mode
+if [ -z "$VERBOSE" -a ! -z "$REMOVE_FILESYSTEM" ]; then
+   warning "$SCRIPTNAME" "$CMDLINE" "$0" \
+            "Filesystems cannot be removed (option -r) when working in quiet mode (option -q)."
+   exit 1
+fi
+
+
+
+# Print some information about the lab
+echo
+becho "======================== Halting lab ============================"
+labWelcome
+becho "================================================================="
+
+# Halt virtual machines
+labHalt
+echo
+becho "Lab has been halted."
+becho "================================================================="
+
+# Show a list of running virtual machines, if asked to
+if [ ! -z "$LISTVM" ]; then
+   echo
+   vlist
+fi
+
+echo

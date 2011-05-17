@@ -1,0 +1,287 @@
+.TH VLIST 1 "November 2009" "" Netkit
+.SH NAME
+vlist \- show information about running netkit virtual machines
+.SH SYNOPSIS
+\fBvlist\fR [options] [\fIMACHINE-ID\fR...]
+
+
+\" ########################################
+
+.SH DESCRIPTION
+The \fIvlist\fR command shows several information about currently running virtual
+machines. If no arguments are provided, it shows a list of virtual machines
+that have been started by the current user. The list entries have the following format:
+\fBUSER\fR, \fBVHOST\fR, \fBPID\fR, \fBSIZE\fR, \fBINTERFACES\fR,
+where:
+.RS
+.TP
+.B
+USER
+is the name of the user who started the virtual machine (virtual machine owner).
+.TP
+.B
+VHOST
+is the name of the virtual machine.
+.TP
+.B
+PID
+is the PID of the virtual machine.
+.TP
+.B
+SIZE
+is the actual amount of memory consumed by the virtual machine, in KB.
+.TP
+.B
+INTERFACES
+is a (possibly empty) list of the network interfaces of the virtual machine,
+together with the virtual collision domains (hubs) they are attached to.
+.RE
+
+At the bottom of the list the following summary information are shown:
+.IP \(en 2
+the number of running virtual machines belonging to the current user and to all
+users;
+.IP \(en 2
+the amount of memory consumed by running virtual machines owned by the current
+user and by all users.
+.PP
+
+The \fIvlist\fR command can also be used to get detailed information about specific
+virtual machines. In this case the virtual machines list is not shown. You can
+select virtual machines for which you want to get such information by providing
+one or more \fIMACHINE\-ID\fRs on the command line. A \fIMACHINE\-ID\fR can be
+either the name or the PID of a virtual machine. Detailed information consist of
+the following data:
+
+\fBAccounting information\fR
+
+.RS
+.TP
+.B
+PID
+virtual machine PID.
+.PD 0
+.TP
+.B
+Owner
+name of the user who started the virtual machine.
+.PD 0
+.TP
+.B
+Used mem
+amount of memory consumed by the virtual machine.
+.RE
+
+\fBEmulation parameters\fR
+
+.RS
+.TP
+.B
+Kernel
+name of the UML kernel used by the virtual machine.
+.PD 0
+.TP
+.B
+Memory
+amount of available memory inside the virtual machine.
+.PD 0
+.TP
+.B
+Model fs
+name of the model (backing) filesystem used by the virtual machine.
+.PD 0
+.TP
+.B
+Filesystem
+name of the (COW) filesystem used by the virtual machine.
+.PD 0
+.TP
+.B
+Interfaces
+list of network interfaces of the virtual machine, and the collision domains they
+are attached to.
+.PD 0
+.TP
+.B
+Hostfs at
+directory of the host filesystem that is made available inside the virtual machine
+under `/hosthome'.
+.PD 0
+.TP
+.B
+Boot cmd
+name of a command (or a script) that has been executed by the virtual machine
+during the boot phase.
+.PD 0
+.TP
+.B
+Hostlab at
+directory of the host filesystem that is made available in the virtual machine
+under `/hostlab'. This directory stores information about the configuration of
+a laboratory.
+.PD 0
+.TP
+.B
+Host WD at
+directory of the host filesystem that is made available in the virtual machine
+under `/hostwd'. This directory stores some temporary files for a laboratory.
+.PD 0
+.TP
+.B
+Console 1\fR, \fBConsole 2
+devices to which the primary and secondary consoles of the virtual machine are
+attached.
+.PD 0
+.TP
+.B
+Other args
+additional parameters or arguments that have been appended to the virtual machine
+kernel command line.
+.PD 0
+.TP
+.B
+Mconsole
+name of the temporary socket file that will be used to send directives to the virtual
+machine (e.g., to halt the virtual machine).
+.RE
+
+Depending on the configuration of the virtual machine, some of the above entries
+may not be shown. For example, for a virtual machine without network interfaces,
+the \fBInterfaces\fR entry is not shown.
+
+\" ########################################
+
+.SH OPTIONS
+
+The following options can be used to influence the output of \fIvlist\fR.
+.TP
+.B
+-n
+.PD 0
+.TP
+.B
+--no-header
+Suppress both header line and summary information in the list of virtual machines.
+This option has no effect if you requested detailed information about
+specific virtual machines.
+
+.TP
+.B
+-u \fIUSERNAME\fR
+.PD 0
+.TP
+.B
+--user=\fIUSERNAME\fR
+Only show virtual machines owned by \fIUSERNAME\fR. The special user name `\fB\-\fR'
+is reserved and can be used to show virtual machines owned by all users.
+.br
+By default, only virtual machines started by the current user (i.e., the one who
+launched the \fIvlist\fR command) are shown.
+
+This option also limits virtual machines for which detailed information can be
+requested. By providing a \fIUSERNAME\fR, you can only ask information about
+virtual machines owned by \fIUSERNAME\fR.
+
+Consider that different users may start virtual machines having the same name.
+Hence, special care must be taken when \fIUSERNAME\fR is `\fB\-\fR' and you are
+requesting detailed information about a virtual machine by providing its name.
+In this case, information about only one virtual machine are reported, even if
+several virtual machines with the same name exist. In particular, \fIvlist\fR
+considers the first machine with a matching name in the list returned by `vlist --user=-'.
+
+.PP
+The following generic options are also supported.
+
+.TP
+.B
+-h
+.PD 0
+.TP
+.B
+--help
+Show usage information.
+
+.TP
+.B
+--version
+Print information about the installed Netkit release and the host kernel version
+and exit. If ``\fI<unavailable>\fR'' is printed instead of a version number,
+then the corresponding information could not be retrieved (for example because
+a non-standard Netkit kernel or filesystem is being used).
+
+
+\" ########################################
+
+.SH "ENVIRONMENT VARIABLES"
+
+All Netkit commands require that the \fBNETKIT_HOME\fR variable contains the
+name of the directory Netkit is installed in.
+
+Apart from this, \fIvlist\fR supports no other environment variables.
+
+
+\" ########################################
+
+.SH EXAMPLES
+
+The following is an example of the output of \fIvlist\fR when launched with no
+arguments.
+
+.RS 3
+.nf
+USER             VHOST               PID       SIZE  INTERFACES
+foo              pc1                 300      12684
+foo              pc2                1126      69720  eth0 @ A, eth1 @ B
+
+Total virtual machines:       2    (you),        2    (all users).
+Total consumed memory:    82404 KB (you),    82404 KB (all users).
+.fi
+.RE
+
+
+The following example shows detailed information about a specific virtual machine,
+which you can get by typing `vlist pc1'.
+
+.RS 3
+.nf
+============= Information for virtual machine "pc1" =============
+ --- Accounting information ---
+   PID:        300
+   Owner:      foo
+   Used mem:   12684 KB
+ --- Emulation parameters ---
+   Kernel:     /home/foo/netkit/kernel/netkit-kernel
+   Modules:    /home/foo/netkit/kernel/modules
+   Memory:     8 MB
+   Model fs:   /home/foo/netkit/fs/netkit-fs
+   Filesystem: /home/foo/pc1.disk
+   Hostfs at:  /home/foo
+   Console 1:  terminal emulator
+   Console 2:  disabled
+   Other args: umid=pc1 root=98:1 uml_dir=/home/foo/.netkit/mconsole quiet
+   Mconsole:   /home/foo/.netkit/mconsole/pc1/mconsole
+.fi
+.RE
+
+
+\" ########################################
+
+.SH "SEE ALSO"
+\fIvclean\fR(1),
+\fIvconfig\fR(1),
+\fIvcrash\fR(1),
+\fIvhalt\fR(1),
+\fIvstart\fR(1).
+
+
+\" ########################################
+
+.SH AUTHOR
+\fIvlist\fR script: Massimo Rimondini
+.br
+This man page: Massimo Rimondini, Fabio Ricci
+
+
+\" ########################################
+
+.so include/bugreport.man

@@ -1,0 +1,457 @@
+#!/bin/sh
+
+#     Copyright 2002-2009 Maurizio Patrignani, Maurizio Pizzonia, Fabio Ricci,
+#     Massimo Rimondini - Computer Networks Research Group, Roma Tre University.
+#
+#     This file is part of Netkit.
+# 
+#     Netkit is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+# 
+#     Netkit is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+# 
+#     You should have received a copy of the GNU General Public License
+#     along with Netkit.  If not, see <http://www.gnu.org/licenses/>.
+
+# This is the Netkit vcrash script. This script can be used to kill running virtual
+# machines without shutting them down. This roughly corresponds to unplugging
+# their power cord. This script is also useful if you want to kill a hanging
+# virtual machine.
+
+SCRIPTNAME=`basename $0`
+
+# The following line has been introduced to ensure backward compatibility
+: ${NETKIT_HOME:=$VLAB_HOME}
+
+if [ -z "$NETKIT_HOME" ]; then
+   echo 1>&2 "$SCRIPTNAME: The NETKIT_HOME environment variable is not properly set;"
+   echo 1>&2 "please set it as described in the Netkit documentation and try"
+   echo 1>&2 "again."
+   exit 1
+fi
+
+CMDLINE="$0 $*"
+
+. "$NETKIT_HOME/bin/script_utils"
+
+# Write to the vcommands log
+logWrite $0 $*
+
+
+# This function is used to print the vcrash usage
+help() {
+   echo
+   echo "Usage: $SCRIPTNAME [options] MACHINE-ID..."
+   cat << END_OF_HELP
+
+This script kills running virtual machines without halting them. This roughly
+corresponds to disconnecting their power plug. MACHINE-ID is either the name or
+the PID of a virtual machine. Available options are:
+
+  -h, --help          Show this help.
+  -k, --kill          By default, virtual machines are crashed by using their
+                      mconsole socket. This method is generally faster, but in
+                      some situations it may not work properly (for example, if
+                      a virtual machine is somewhy frozen). If crashing a
+                      machine via its mconsole fails, vcrash automatically tries
+                      hard to kill the virtual machine processes. By using this
+                      option, the attempt via the mconsole socket is simply
+                      skipped, and virtual machine processes are just killed.
+  -q, --quick
+      --quiet         Quiet mode (suppress any output except errors and
+                      warnings). Using this option also disables checking
+                      whether virtual machines have actually been crashed, and
+                      causes vcrash to exit (almost) immediately. The 'almost'
+                      is due to the fact that vcrash will still wait for the
+                      crash directive to reach the virtual machine when mconsole
+                      is being used (default behaviour unless -k is used). Of
+                      course, a check inside vcrash prevents from waiting
+                      endlessly.
+  -r, --remove-fs     Delete virtual machine (COW) filesystem after crashing
+                      machine. Using this option has no effect on machines
+                      started with the --no-cow option. Log files are not
+                      removed.
+      --test          Do not actually crash virtual machines. Just show which
+                      processes would be killed or which mconsole socket would
+                      be used to send the crash directive. This option cannot be
+                      used when working in quiet mode.
+  -u, --user=USERNAME Crash virtual machine(s) owned by user USERNAME. By using
+                      the special user name '-' any virtual machine can be
+                      crashed, regardless of its owner (this requires
+                      administrative privileges). If MACHINE-ID is a virtual
+                      machine name, and the option --user=- is being used,
+                      then only the virtual machine reported by
+                      'vlist --user=- MACHINE-ID' is crashed.
+      --version       Print version information and exit.
+
+The following options are deprecated and should not be used. They are only
+provided for backward compatibility.
+
+      --force         This option alters command syntax. In particular, when
+                      using --force only one virtual machine can be crashed.
+                      Two arguments are expected: the first one is the PID of
+                      the virtual machine and the second one is its name.
+                      Option --remove-fs does not work when using this switch.
+      --root          A synonym for --user=-.
+
+END_OF_HELP
+}
+
+
+
+# Get command line options
+INVALID_OPTION=0
+OPT_LIST="help,quiet,kill,user:,version,force,remove-fs,root,test"
+CMDLINE_OPTIONS=`getopt -ql "$OPT_LIST" -- "hqkru:" "$@"`
+if [ $? -gt 0 ]; then
+   INVALID_OPTION=1
+fi
+
+
+
+USER=$USERID
+
+
+# Parse command line options
+parseCmdLine() {
+   while [ $# -gt 0 ]; do
+   	CURRENT_ARGUMENT="$1"
+      case "$CURRENT_ARGUMENT" in
+      
+         --help|-h)
+            help
+            exit;;
+            
+         --quiet|--quick|-q)
+            BE_QUIET=1;;
+            
+         --kill|-k)
+            DO_KILL=1;;
+            
+         --remove-fs|-r)
+            REMOVE_FS=1;;
+         
+         --user|-u)
+            shift; CURRENT_ARGUMENT="$1"
+            if [ "x$CURRENT_ARGUMENT" = "x" ]; then
+               warning "$SCRIPTNAME" "$CMDLINE" "$0" \
+                       "Expecting username."
+               exit 1
+            fi
+            checkSpaces "$CURRENT_ARGUMENT"
+            if [ "$CURRENT_ARGUMENT" = "-" ]; then
+               USER=""
+            else
+               USER=$CURRENT_ARGUMENT
+            fi;;
+            
+         --version)
+            showVersion
+            exit 0;;
+            
+         --force)
+            FORCE_MODE=1;;
+            
+         --root)
+            USER="";;
+            
+         --test)
+            TEST_MODE=1;;
+            
+         --)
+            shift
+            break;;
+      esac
+      shift
+   done
+   
+   if [ ! -z "$FORCE_MODE" ]; then
+      while [ $# -gt 0 ]; do
+         checkSpaces "$1"
+         if [ ! -z "$VM_PID" ]; then
+            if [ ! -z "$VM_NAME" ]; then
+               warning "$SCRIPTNAME" "$CMDLINE" "$0" "Too many arguments: \"$1\". Option --force requires two arguments."
+               exit 1
+            else
+               VM_NAME=$1
+            fi
+         else
+            VM_PID=$1
+         fi
+         shift
+      done
+   else
+      while [ $# -gt 0 ]; do
+         checkSpaces "$1"
+         VM_IDS="$VM_IDS $1"
+         shift
+      done
+   fi
+}
+eval parseCmdLine $CMDLINE_OPTIONS
+
+
+# Check whether user gave some strange options
+if [ $INVALID_OPTION -eq 1 ]; then
+   warning "$SCRIPTNAME" "$CMDLINE" "$0" "Invalid option or missing option parameter."
+   exit 1
+fi
+
+
+# Check whether virtual machine name is missing
+if [ -z "$FORCE_MODE" -a -z "$VM_IDS" ]; then
+   warning "$SCRIPTNAME" "$CMDLINE" "$0" "Virtual machine name/PID is missing."
+   exit 1
+fi
+
+
+# Check whether incompatible modes have been selected
+if [ ! -z "$FORCE_MODE" -a ! -z "$USE_MCONSOLE" ]; then
+   warning "$SCRIPTNAME" "$CMDLINE" "$0" "You cannot use the --force option if you asked to use mconsole sockets."
+   exit 1
+fi
+
+
+# Check whether arguments for the --force option are missing
+if [ ! -z "$FORCE_MODE" ]; then
+   if [ -z "$VM_PID" -o -z "$VM_NAME" ]; then
+      warning "$SCRIPTNAME" "$CMDLINE" "$0" "Missing virtual machine and/or PID."
+      exit 1
+   fi
+fi
+
+
+# Test mode is senseless if working in quiet mode
+if [ ! -z "$TEST_MODE" -a ! -z "$BE_QUIET" ]; then
+   warning "$SCRIPTNAME" "$CMDLINE" "$0" "Option --test cannot be used when working in quiet mode."
+   exit 1
+fi
+
+
+
+# This function removes a virtual machine filesystem
+removeFs() {
+   [ ! -f "$1" ] && return;      # Filesystem does not exist
+   if [ -z "$BE_QUIET" ]; then
+      echo -n "Removing filesystem \"$1\"... "
+      rm -f "$1" > /dev/null 2>&1 && echo "done". || echo "failed!"
+   else
+      rm -f "$1" > /dev/null 2>&1
+   fi
+}
+
+
+
+# This function checks whether there is a specific running virtual machine,
+# based on either its PID or its name. Variables VMINFO_MCONSOLE and VM_PROCESSES
+# are populated with corresponding information upon success, or left empty on
+# failure. If FASTFIND is set, then VM_PROCESSES is never populated (this
+# slightly improves execution time for this function).
+findVM() {
+   VMINFO_MCONSOLE=""
+   VM_PROCESSES=""
+   if echo $1 | grep -qE "^[0-9]+$"; then
+      # This is a virtual machine PID
+      if ! getVMinfoByPID "$1"; then
+         echo 1>&2 "$SCRIPTNAME: no virtual machine having PID $1 exists."
+         continue
+      fi
+      [ -z "$FASTFIND" ] && VM_PROCESSES=`getVMPIDsByPID "$1"`
+   else
+      # This is a virtual machine name
+      if ! getVMinfoByName "$USER" "$1"; then
+         echo -n 1>&2 "$SCRIPTNAME: no virtual machine named \"$1\" exists"
+         if [ ! -z "$USER" ]; then
+            echo " for user $USER."
+         else
+            echo "."
+         fi
+         continue
+      fi
+      [ -z "$FASTFIND" ] && VM_PROCESSES=`getVMPIDsByName "$USER" "$1"`
+   fi
+}
+
+
+
+# This function kills a virtual machine by simply signaling the corresponding
+# processes. It is assumed that VMINFO variables have been populated by a
+# preceding call to either getVMinfoByName or getVMinfoByPID.
+killBySignaling() {
+   local RETURN_VALUE
+   RETURN_VALUE=1
+   [ -z "$BE_QUIET" ] && echo -n "Killing... "
+   # Signalling processes twice ensures they stop even
+   # if they need to be killed in a certain order
+   kill -TERM $VM_PROCESSES > /dev/null 2>&1
+   kill -TERM $VM_PROCESSES > /dev/null 2>&1
+   if [ -z "$BE_QUIET" ]; then
+      sleep 1
+      # Do not use getVMinfoByPID here: this may result in missing some
+      # process which may have started in the meantime (that process would of
+      # course have a different PID).
+      if getVMinfoByName "$USER" "$VMINFO_NAME"; then
+         [ -z "$BE_QUIET" ] && echo -n "killing harder... "
+         # Recompute process list (some thread may have been launched in the
+         # meantime).
+         unset FASTFIND
+         findVM $VMINFO_NAME
+         
+         kill -KILL $VM_PROCESSES > /dev/null 2>&1
+         kill -CONT $VM_PROCESSES > /dev/null 2>&1
+         sleep 1
+         if getVMinfoByName "$USER" "$VMINFO_NAME"; then
+            if [ -z "$BE_QUIET" ]; then
+               echo "failed!"
+            fi
+            echo 1>&2 "Failed to crash virtual machine \"$VMINFO_NAME\"."
+         else
+            [ -z "$BE_QUIET" ] && echo "done."
+            RETURN_VALUE=0
+         fi
+      else
+         [ -z "$BE_QUIET" ] && echo "done."
+         RETURN_VALUE=0
+      fi
+   fi
+   # Virtual machine filesystem is removed only if it has been successfully crashed
+   [ $RETURN_VALUE = 0 -a ! -z "$REMOVE_FS" -a "$VMINFO_FS" != "$VMINFO_SHAREDFS" ] && removeFs "$VMINFO_FS"
+}
+
+
+
+# This function uses a virtual machine management console to immediately crash
+# it. The function also takes care of handling the case in which uml_console
+# freezes. In such a situations, it kills the uml_mconsole process and returns
+# a non-zero value. Please note that the function only fails when uml_mconsole
+# hangs, regardless of whether the virtual machine has been actually crashed
+# or not. Here it is assumed that VMINFO variables have been populated
+# by a previous call to either getVMinfoByName or getVMinfoByPID.
+vmconsoleHalt() {
+   uml_mconsole "$VMINFO_MCONSOLE" halt > /dev/null 2>&1 &
+   MCONSOLE_PID=$!
+   # Check whether the mconsole process is hanging forever
+   i=0
+   while [ $i -le 5 ]; do
+      [ ! -e /proc/$MCONSOLE_PID ] && return 0
+      [ $i -lt 5 ] && sleep 1
+      i=$(($i + 1))
+   done
+   [ -z "$BE_QUIET" ] && echo "hangup detected... "
+   kill $MCONSOLE_PID
+   return 1
+}
+
+
+
+# This function kills a virtual machine by using their management console
+# (mconsole) socket. Upon failure, it reverts to killing the virtual machine
+# processes. It assumes that VMINFO variables have been populated by a
+# previous call to either getVMinfoByName or getVMinfoByPID.
+killByMconsole() {
+   [ -z "$BE_QUIET" ] && echo -n "Crashing... "
+   vmconsoleHalt
+   # When the above command exits, an attempt via the mconsole has been
+   # performed. Regardless of whether the virtual machine has actually halted,
+   # the above command ensures that the uml_mconsole process has ended.
+   if [ -z "$BE_QUIET" ]; then
+      # A second attempt is performed only if we're not in quiet mode
+      if getVMinfoByPID "$VMINFO_PID"; then
+         echo -n "retrying... "
+         sleep 1
+         if ! vmconsoleHalt; then
+            # uml_mconsole is hanging forever
+            
+            # The two lines below are necessary in order to retrieve the
+            # virtual machine PIDs, which are required by killBySignaling.
+            # We chose not to retrieve them immediately because this requires
+            # time and is only necessary if mconsole does not work.
+            unset FASTFIND
+            findVM $VM
+            killBySignaling $VMINFO_PID
+            return $?
+         elif getVMinfoByPID "$VMINFO_PID"; then
+            # Attempt to kill virtual machine processes
+            
+            # See the comment above for the 'if' statement. Notice that, since
+            # we are inside an 'elif' branch, findVM is never invoked twice.
+            unset FASTFIND
+            findVM $VM
+            killBySignaling $VMINFO_PID
+            return $?
+         else
+            echo "done."
+         fi
+      else
+         echo "done."
+      fi
+   fi
+   [ ! -z "$REMOVE_FS" -a "$VMINFO_FS" != "$VMINFO_SHAREDFS" ] && removeFs "$VMINFO_FS"
+}
+
+
+
+# This function prints some information about a virtual machine. It assumes
+printConciseVMinfo() {
+   if [ -z "$BE_QUIET" ]; then
+      echo
+      echo "============= Crashing virtual machine \"$VMINFO_NAME\" (PID $VMINFO_PID) ========="
+      echo "Virtual machine owner: $VMINFO_USER"
+      echo "Virtual machine mconsole socket: $VMINFO_MCONSOLE"
+      [ ! -z "$VM_PROCESSES" ] && echo "Virtual machine PIDs: " $VM_PROCESSES
+   fi
+}
+
+
+
+
+
+if [ ! -z "$FORCE_MODE" ]; then
+   # Simple --force mode: user gave both PID and name for the virtual machine
+   VM_PROCESSES=`getVMPIDsByPID "$VM_PID"`
+   if [ ! -z "$VM_PROCESSES" ]; then
+      if [ -z "$BE_QUIET" ]; then
+         echo
+         echo "============= Crashing virtual machine \"$VMINFO_NAME\" (PID $VMINFO_PID) ========="
+         echo "Virtual machine PIDs are: " $VM_PROCESSES
+      fi
+      [ -z "$BE_QUIET" ] && echo -n "Killing..."
+      kill -KILL $VM_PROCESSES > /dev/null 2>&1
+      kill -CONT $VM_PROCESSES > /dev/null 2>&1
+      [ -z "$BE_QUIET" ] && echo "done."
+   fi
+elif [ -z "$DO_KILL" ]; then
+   # Use mconsole sockects to crash virtual machine kernels
+   for VM in $VM_IDS; do
+      # Check whether the current machine exists
+      FASTFIND=1
+      findVM $VM
+      
+      if [ ! -z "$VMINFO_MCONSOLE" ]; then
+         # The machine exists
+         printConciseVMinfo
+         if [ -z "$TEST_MODE" ]; then
+            killByMconsole
+         fi
+      fi
+   done
+else
+   # Crash virtual machines by simply killing their processes
+   for VM in $VM_IDS; do
+      # Check whether the current machine exists
+      unset FASTFIND
+      findVM $VM
+      
+      if [ ! -z "$VM_PROCESSES" ]; then
+         printConciseVMinfo
+         if [ -z "$TEST_MODE" ]; then
+            killBySignaling
+         fi
+      fi
+   done
+fi

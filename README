@@ -1,0 +1,130 @@
+Welcome to Netkit version 2.8.
+
+
+WHAT IS NETKIT
+--------------
+
+Netkit is a self-contained environment that makes it easy and costless to
+emulate complex network configurations on a single host machine. The idea
+underlying Netkit is that each network device is implemented by a virtual
+machine running the appropriate software. Virtual machines can then be
+interconnected as desired by configuring virtual collision domains.
+
+Interconnected machines may be organized to form a laboratory (lab), which can
+be used to emulate the behavior of a particular service or protocol (e.g., DNS).
+The configuration of the lab can be saved to ease its distribution and
+replication.
+
+Netkit, in itself, is an open source project aiming at integrating different
+other open source products. See the THANKS section for a brief list of the
+software resources integrated into Netkit.
+
+The project was born (and is still carried on) with the main purpose of
+supporting teaching of networking subjects with realistic experiences.
+
+
+SYSTEM REQUIREMENTS
+-------------------
+
+Netkit virtual machines can be configured in a flexible way, so that you can
+decide how many system resources on the host machine should be allocated to
+them. System requirements are not very strict. Netkit can run on a personal
+computer with:
+
+- An i386/amd64 architecture (read: Pentiums and AMDs are fine). For best
+  performance, CPU frequency should be above 600MHz. Netkit works fine also on
+  slower systems, but this may impact usability. If your host runs a 64-bit OS,
+  you may need to install 32-bit compatibility libraries (most notably,
+  libc6-i386 and ia32-libs).
+- At least 256MB of RAM (this mainly depends on the requirements of the Linux
+  installation you are using: Netkit virtual machines may consume slightly more
+  than 32MB each).
+- At least 1GB of free hard disk space (this is required to install the
+  virtual machines filesystem that is distributed with Netkit); even if not
+  explicitly required, it is *strongly* recommended that Netkit is installed on
+  an ext2/ext3 partition. Not doing so is likely to result in performance losses
+  and/or malfunctions.  
+- A Linux operating system installation running a 2.6 kernel (2.4 kernels
+  may still be supported though); the installation should be capable of
+  running a graphical session (read: should include a configured X server);
+  this is not strictly required, but it eases running multiple virtual machines
+  a lot.
+
+Due to the particular nature of the User Mode Linux kernel (which Netkit is
+based on), Netkit cannot be natively run on operating systems which are
+different from Linux.
+
+
+DOCUMENTATION
+-------------
+
+Netkit documentation is available in two separate forms: the Netkit environment
+is fully described by man pages (you can start your reading from 'man netkit'),
+while some other documentation and the description of the labs are provided as
+slides. Standard Netkit documentation is included in the Netkit package itself.
+Additional documentation can be downloaded from http://www.netkit.org/.
+
+
+BUG REPORTING
+-------------
+
+Being an integration of different software products, Netkit is a somewhat
+complex product. We are doing our best to make it be a stable, fast, solid and
+reliable product. However, due to the complex interactions between the various
+components, misbehaviors or malfunctions may occur in the presence of particular
+configurations. We put our effort in trying to fix these bugs as fast as
+possible (remember that this is not the only activity in our lives ;) ). In
+turn, we expect users to signal them so that we can improve the quality of
+Netkit as time goes on.
+
+Please make sure you have carefully read the documentation (including man pages
+and FAQs, if available) before submitting a bug report. Instructions for doing
+this are provided in the man pages. Bug reports should be sent to
+<contact@netkit.org> or submitted for public discussion to
+<netkit.users@list.dia.uniroma3.it>.
+
+
+CREDITS AND CONTACTS
+--------------------
+
+This distribution has been released by the Computer Networks (CompuNet) Research
+Group at the University of Roma Tre (http://www.dia.uniroma3.it).  People
+involved in the project include (but are not limited to):
+Giuseppe Di Battista
+Maurizio Patrignani
+Stefano Pettini
+Maurizio Pizzonia
+Fabio Ricci
+Massimo Rimondini
+
+The project has been carried on in the past with significant contributions from
+the Linux User Group "LUG Roma Tre" (http://www.lugroma3.org).
+
+Apart from people from CompuNet and from the LUG, another special mention is due
+for contributions provided by Andrea Cecchetti, Lorenzo Colitti, Federico
+Mariani, and Flavia Picard.
+
+The current official Netkit site is http://www.netkit.org/. Here you can find the
+Netkit distribution itself and also some additional resources (e.g., some labs).
+Contact information is provided as well. You can reach the Netkit team by
+writing to <contact@netkit.org> or by subscribing to the mailing list
+<netkit.users@list.dia.uniroma3.it>.
+
+
+THANKS
+------
+
+Netkit is a software integration project. Hence, we would like to thank at least
+the following people for having made all this possible:
+
+- Linus Torvalds for Linux
+- All the people working on the Linux kernel
+- James R. Leu and Ramon Casellas for their work on MPLS routing
+- Jeff Dike, Paolo Giarrusso, and the other contributors for User Mode Linux
+  specific resources
+- Kunihiro Ishiguro, Paul Jakma, and the other developers for the Zebra/Quagga
+  routing daemon
+- Lennert Buytenhenk and the other people working on bridge sources and
+  utilities at http://bridge.sourceforge.net
+- many many others...
+

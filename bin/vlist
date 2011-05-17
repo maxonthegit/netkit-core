@@ -1,0 +1,235 @@
+#!/bin/sh
+
+#     Copyright 2002-2009 Maurizio Patrignani, Maurizio Pizzonia, Fabio Ricci,
+#     Massimo Rimondini - Computer Networks Research Group, Roma Tre University.
+#
+#     This file is part of Netkit.
+# 
+#     Netkit is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+# 
+#     Netkit is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+# 
+#     You should have received a copy of the GNU General Public License
+#     along with Netkit.  If not, see <http://www.gnu.org/licenses/>.
+
+# This is the Netkit vlist script, which is used to list running virtual machines
+# and/or ask for details about a given machine.
+
+SCRIPTNAME=`basename $0`
+
+# The following line has been introduced to ensure backward compatibility
+: ${NETKIT_HOME:=$VLAB_HOME}
+
+if [ -z "$NETKIT_HOME" ]; then
+   echo 1>&2 "$SCRIPTNAME: The NETKIT_HOME environment variable is not properly set;"
+   echo 1>&2 "please set it as described in the Netkit documentation and try"
+   echo 1>&2 "again."
+   exit 1
+fi
+
+CMDLINE="$0 $*"
+
+. "$NETKIT_HOME/bin/script_utils"
+
+# Write to the vcommands log
+logWrite $0 $*
+
+
+# This function is used to print the vlist usage
+help() {
+   echo
+   echo "Usage: $SCRIPTNAME [options] [MACHINE-ID...]"
+   cat << END_OF_HELP
+
+This script can be used to produce a list of running virtual machines. You can
+use the following options to select the output contents:
+
+  -h, --help          Show this help.
+  -n, --no-header     Suppress header line and summary information in the
+                      output.
+  -u, --user=USERNAME Show virtual machines owned by USERNAME.
+                      Using the special user name '-' results in considering
+                      all users. By default, only virtual machines for the
+                      current user are shown.
+      --version       Print version information and exit.
+
+By passing one or more MACHINE-IDs it is possible to get detailed information
+about specific running virtual machines. MACHINE-ID is either a virtual machine 
+name or its PID. If a virtual machine name is passed as argument, and the option
+--user=- is being used, then information about the first machine with a matching
+name in the output of \`vlist --user=-' are reported.
+
+END_OF_HELP
+}
+
+
+# Get command line options
+INVALID_OPTION=0
+OPT_LIST="help,no-header,user:,version"
+CMDLINE_OPTIONS=`getopt -ql "$OPT_LIST" -- "hnu:" "$@"`
+if [ $? -gt 0 ]; then
+   INVALID_OPTION=1
+fi
+
+
+USER=$USERID
+
+# Parse command line options
+parseCmdLine() {
+   while [ $# -gt 0 ]; do
+		CURRENT_ARGUMENT="$1"
+      case "$CURRENT_ARGUMENT" in
+      
+         --help|-h)
+            help
+            exit;;
+            
+         --no-header|-n)
+            NO_HEADER=1;;
+         
+         --user|-u)
+            shift; CURRENT_ARGUMENT="$1"
+            if [ "x$CURRENT_ARGUMENT" = "x" ]; then
+               warning "$SCRIPTNAME" "$CMDLINE" "$0" \
+                       "Expecting username."
+               exit 1
+            fi
+            checkSpaces "$CURRENT_ARGUMENT"
+            if [ "$CURRENT_ARGUMENT" = "-" ]; then
+               USER=""
+            else
+               USER=$CURRENT_ARGUMENT
+            fi;;
+         
+         --version)
+            showVersion
+            exit 0;;
+            
+         --)
+            shift
+            break;;
+            
+      esac
+      shift
+   done
+   
+   # Parse virtual machine name   
+   while [ $# != 0 ]; do
+      checkSpaces "$1"
+      VM_IDS="$VM_IDS $1"
+      shift
+   done
+
+}
+eval parseCmdLine $CMDLINE_OPTIONS
+
+
+# Check whether user gave some strange options
+if [ $INVALID_OPTION -eq 1 ]; then
+   warning "$SCRIPTNAME" "$CMDLINE" "$0" "Invalid option or missing option parameter."
+   exit 1
+fi
+
+# Check whether -u - is being used together with a virtual machine ID
+if [ -z "$USER" -a ! -z "$VM_IDS" ]; then
+   warning "$SCRIPTNAME" "$CMDLINE" "$0" "Please provide a specific user name."
+   exit 1
+fi
+
+
+
+# Actually display list of virtual machines
+if [ -z "$VM_IDS" ]; then
+   showVMList "$NO_HEADER" "$USER"
+fi
+
+
+
+
+# This function prints complete information about a virtual machine
+printVMinfo() {
+   echo
+   echo "============= Information for virtual machine \"$VMINFO_NAME\" ============="
+   echo " --- Accounting information ---"
+   echo "   PID:        $VMINFO_PID"
+   echo "   Owner:      $VMINFO_USER"
+   echo "   Used mem:   $VMINFO_SIZE KB"
+   echo " --- Emulation parameters ---"
+   echo "   Kernel:     $VMINFO_KERNEL"
+   [ ! -z "$VMINFO_KERNEL_MODULES" ] && echo "   Modules:    $VMINFO_KERNEL_MODULES"
+   echo "   Memory:     ${VMINFO_MEM} MB"
+   echo "   Model fs:   $VMINFO_SHAREDFS"
+   echo -n "   Filesystem: "
+   if [ "$VMINFO_FS" = "$VMINFO_SHAREDFS" ]; then
+      echo "using model fs (no COW)"
+   else
+      echo "$VMINFO_FS"
+   fi
+   
+   if [ ! -z "$VMINFO_ETH_INTERFACES" ]; then
+      echo -n "   Interfaces: "
+      echo "$VMINFO_ETH_INTERFACES" | awk -v RS=" +" -v FS="=" \
+         '{
+            if ($0 == "") {
+               getline
+               NR--
+            }
+            if (NR>1) printf "               "
+            device = $1
+            match ($2, "^[^_]+_[^_]+_[^_\\.]+\\..*")
+            gsub("\n","",$2)
+            hub_param_count = split(substr($2,RSTART,RLENGTH), hub_parameters, "[_.]")
+            collision_domain = hub_parameters[hub_param_count-1]
+            print device " @ " collision_domain "  (" $2 ")"
+         }'
+   fi
+   [ ! -z "$VMINFO_HOSTHOME" ] && echo "   Hostfs at:  $VMINFO_HOSTHOME"
+   [ ! -z "$VMINFO_EXEC" ] && echo "   Boot cmd:   $VMINFO_EXEC"
+   [ ! -z "$VMINFO_HOSTLAB" ] && echo "   Hostlab at: $VMINFO_HOSTLAB"
+   [ ! -z "$VMINFO_HOSTWD" ] && echo "   Host WD at: $VMINFO_HOSTWD"
+   echo -n "   Console 1:  "
+   case "$VMINFO_CON0" in
+      NONE)    echo "disabled";;
+      XTERM)   echo "terminal emulator";;
+      THIS)    echo "stdin/stdout";;
+      PTY)     echo "pty";;
+      PORT:*)  echo "port ${VMINFO_CON0#PORT:}"
+   esac
+   echo -n "   Console 2:  "
+   case "$VMINFO_CON1" in
+      NONE)    echo "disabled";;
+      XTERM)   echo "terminal emulator";;
+      THIS)    echo "stdin/stdout";;
+      PTY)     echo "pty";;
+      PORT:*)  echo "port ${VMINFO_CON1#PORT:}"
+   esac
+   [ ! -z "$VMINFO_APPENDED" ] && echo "   Other args: $VMINFO_APPENDED"
+   echo "   Mconsole:   $VMINFO_MCONSOLE"
+   echo
+}
+
+
+# Get information for specific virtual machines
+for VM in $VM_IDS; do
+   if echo $VM | grep -qE "^[0-9]+$"; then
+      # This is a virtual machine PID
+      if ! getVMinfoByPID "$VM"; then
+         echo 1>&2 "$SCRIPTNAME: no virtual machine having PID $VM exists."
+      else
+         printVMinfo
+      fi
+   else
+      # This is a virtual machine name
+      if ! getVMinfoByName "$USER" "$VM"; then
+         echo 1>&2 "$SCRIPTNAME: no virtual machine named \"$VM\" exists for user $USER."
+      else
+         printVMinfo
+      fi
+   fi
+done

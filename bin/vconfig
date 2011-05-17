@@ -1,0 +1,366 @@
+#!/bin/sh
+
+#     Copyright 2002-2009 Maurizio Patrignani, Maurizio Pizzonia, Fabio Ricci,
+#     Massimo Rimondini - Computer Networks Research Group, Roma Tre University.
+#
+#     This file is part of Netkit.
+# 
+#     Netkit is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+# 
+#     Netkit is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+# 
+#     You should have received a copy of the GNU General Public License
+#     along with Netkit.  If not, see <http://www.gnu.org/licenses/>.
+
+# This is the Netkit vconfig script, which allows to attach virtual
+# machine interfaces on the fly. Interface detaching is not supported,
+# because the release function for uml-netdev0 is still under development.
+# This script already supports interface removal, which can be achieved by
+# using an empty collision domain name for an interface. Yet, this feature
+# is currently hidden by a check on the presence of a valid collision domain name.
+
+SCRIPTNAME=`basename $0`
+
+# The following line has been introduced to ensure backward compatibility
+: ${NETKIT_HOME:=$VLAB_HOME}
+
+if [ -z "$NETKIT_HOME" ]; then
+   echo 1>&2 "$SCRIPTNAME: The NETKIT_HOME environment variable is not properly set;"
+   echo 1>&2 "please set it as described in the Netkit documentation and try"
+   echo 1>&2 "again."
+   exit 1
+fi
+
+CMDLINE="$0 $*"
+
+. "$NETKIT_HOME/bin/script_utils"
+
+# Write to the vcommands log
+logWrite $0 $*
+
+
+# This function is used to print the vstart usage
+help() {
+   echo
+   echo "Usage: $SCRIPTNAME [options] MACHINE-ID"
+   cat << END_OF_HELP
+
+This script can be used to attach interfaces to running virtual machines.
+Configuration can be performed via the following options:
+
+      --ethN=DOMAIN     Equip virtual machine with a network interface ethN,
+END_OF_HELP
+   echo "                        where N is a number between 0 and $[$MAX_INTERFACES-1]. DOMAIN is the name"
+   cat << END_OF_HELP
+                        of the collision domain the interface should be
+                        connected to. Using an empty DOMAIN name (e.g., \`eth0=')
+                        results in detaching the interface from a running
+                        virtual machine. The special name "tap" is reserved: when
+                        connecting an interface to the "tap" domain, an external
+                        network can be reached through this interface. A "tap"
+                        collision domain must be declared with the following
+                        syntax:
+                        --ethX=tap,TAP_ADDRESS,GUEST_ADDRESS
+                        where TAP_ADDRESS is the IP address of the "host side"
+                        of the interface and GUEST_ADDRESS is the IP address of
+                        the interface inside the virtual machine. TAP_ADDRESS
+                        and GUEST_ADDRESS must be on the same network.
+                        Notices:
+                        - Using "tap" domains requires administrative
+                          privileges. This script will take care of asking you
+                          for the root password when needed.
+                        - TAP_ADDRESS is mandatory, but is only taken into
+                          account when a "tap" collision domain is first used.
+                          The script only uses one "tap" collision domain for
+                          each user on the host machine.
+                        - Tunnel configurations are not automatically removed
+                          when halting machines: you should use the vclean
+                          script for this purpose.
+                        Please read the Netkit documentation before using "tap"
+                        collision domains.
+                          
+MACHINE-ID is either a virtual machine name or its PID.
+
+Other options are:
+
+  -h, --help            Show this help.
+  -p, --print           Do not actually start anything. Just show which commands
+                        would be executed.
+  -q, --quiet           Quiet mode (suppress any output except errors and
+                        warnings).
+  -u, --user=USERNAME   Attach interfaces to a virtual machine owned by user
+                        USERNAME. Using the special user name '-' results in
+                        considering all users. If MACHINE-ID is a virtual
+                        machine name, and the option --user=- is being used,
+                        then interfaces are attached to the virtual machine
+                        reported by 'vlist --user=- MACHINE-ID'. By default,
+                        interfaces are attached to virtual machines owned by the
+                        current user.
+      --version         Print version information and exit.
+                        
+Notice: arguments containing spaces are not allowed. Interfaces attached by
+using this tool will not be shown by vlist, and the corresponding virtual hubs
+will not be automatically stopped. Also, when using "tap" collision domains,
+configuration inside virtual machines must be performed by hand.
+
+END_OF_HELP
+}
+
+
+# Get command line options
+INVALID_OPTION=0
+OPT_LIST="help,print,quiet,version,user:"
+i=0
+while [ $i -lt $MAX_INTERFACES ]; do
+   OPT_LIST="${OPT_LIST},eth$i:"
+	i=$(($i + 1))
+done
+CMDLINE_OPTIONS=`getopt -ql "$OPT_LIST" -- "hpqvu:" "$@"`
+if [ $? -gt 0 ]; then
+   INVALID_OPTION=1
+fi
+
+
+# Parse command line options
+parseCmdLine() {
+	local CURRENT_ARGUMENT
+   while [ $# -gt 0 ]; do
+		CURRENT_ARGUMENT="$1"
+      case "$CURRENT_ARGUMENT" in
+         --eth*)
+            ETH_INTERFACES="${ETH_INTERFACES} ${CURRENT_ARGUMENT#--}="
+            shift; CURRENT_ARGUMENT="$1"
+            if containsRegexp CURRENT_ARGUMENT "_"; then
+               warning "$SCRIPTNAME" "$CMDLINE" "$0" \
+                       "Invalid collision domain: $CURRENT_ARGUMENT (underscoresare are not allowed)."
+               exit 1
+            fi
+            if containsRegexp CURRENT_ARGUMENT "," || containsRegexp CURRENT_ARGUMENT "\\."; then
+               if [ "${CURRENT_ARGUMENT#tap,}" = "$CURRENT_ARGUMENT" ]; then
+                  # This is not a special hub, but its name contains a comma
+                  warning "$SCRIPTNAME" "$CMDLINE" "$0" \
+                        "Invalid collision domain: $CURRENT_ARGUMENT (commas and dots are only allowed for Internet connected collision domains)."
+                  exit 1
+               fi
+            fi
+
+				# If no collision domain name is provided, the interface will be
+				# detached from the virtual machine
+            checkSpaces "$CURRENT_ARGUMENT"
+            ETH_INTERFACES="${ETH_INTERFACES}${CURRENT_ARGUMENT}" ;;
+
+         --help|-h)
+            help
+            exit;;
+
+         -q|--quiet)
+            BE_QUIET=1;;
+            
+         --print|-p)
+            JUST_PRINT=1;;
+            
+         --user|-u)
+            shift; CURRENT_ARGUMENT="$1"
+            if [ "x$CURRENT_ARGUMENT" = "x" ]; then
+               warning "$SCRIPTNAME" "$CMDLINE" "$0" \
+                       "Expecting username."
+               exit 1
+            fi
+            checkSpaces "$CURRENT_ARGUMENT"
+            if [ "$CURRENT_ARGUMENT" = "-" ]; then
+               USER=""
+            else
+               USER=$CURRENT_ARGUMENT
+            fi;;
+         
+         --version)
+            showVersion
+            exit 0;;
+            
+         --)
+            shift
+            break;;
+      esac
+      shift
+   done
+
+   # Parse virtual machine name   
+   while [ $# != 0 ]; do
+      if [ ! -z "$VM_ID" ]; then
+         warning "$SCRIPTNAME" "$CMDLINE" "$0" "Too many arguments: $*"
+         exit 1
+      fi
+      checkSpaces "$1"
+      VM_ID=$1
+      
+      shift
+   done
+}
+eval parseCmdLine $CMDLINE_OPTIONS
+
+
+# Check whether user gave some strange options
+if [ $INVALID_OPTION -eq 1 ]; then
+   warning "$SCRIPTNAME" "$CMDLINE" "$0" "Invalid option or missing option parameter."
+   exit 1
+fi
+
+# Check whether virtual machine name is missing
+if [ -z "$VM_ID" ]; then
+   warning "$SCRIPTNAME" "$CMDLINE" "$0" "Virtual machine name/PID is missing."
+   exit 1
+fi
+
+
+# This function prepares network interfaces for use.
+setupInterfaces() {
+   local DEVICE HUB_NAME HUB_SOCKET FIRSTLINE IF_CMDLINE CHECK_TAP TAP_ADDRESS GUEST_ADDRESS
+   FIRSTLINE=1
+   while [ $# -gt 0 ]; do
+      # Using a double percent (%%) allows to tolerate situations in which
+      # virtual hub names include an equal sign (=)
+      DEVICE=${1%%=*}
+      # Using a single hash (#) allows to tolerate situations in which
+      # virtual hub names include an equal sign (=)
+      HUB_NAME=${1#*=}
+      if [ "${HUB_NAME}" = "tap" ]; then
+         echo 1>&2
+         warning "$SCRIPTNAME" "$CMDLINE" "$0" "Invalid tap collision domain specification: \"$1\"."
+         exit 1
+      fi
+      if containsRegexp HUB_NAME "tap,"; then
+         # This is an Internet connected (i.e., "tap") collision domain
+         CHECK_TAP=`echo $HUB_NAME | awk -v FS="," \
+            '
+               {
+                  if (NF!=3 ||
+                      !match($2,"^[0-9]+\\\.[0-9]+\\\.[0-9]+\\\.[0-9]+$") ||
+                      !match($3,"^[0-9]+\\\.[0-9]+\\\.[0-9]+\\\.[0-9]+$"))
+                     print 0
+                  else {
+                     print "HUB_NAME=tap"
+                     print "TAP_ADDRESS=" $2
+                     print "GUEST_ADDRESS=" $3
+                  }
+               }
+            '`
+         if [ "x$CHECK_TAP" = "x0" ]; then
+            echo 1>&2
+            warning "$SCRIPTNAME" "$CMDLINE" "$0" "Invalid tap collision domain specification: \"$1\"."
+            exit 1
+         else
+            eval "$CHECK_TAP"
+         fi
+      fi
+
+      HUB_SOCKET="${HUB_SOCKET_DIR}/${HUB_SOCKET_PREFIX}_${USERID}_${HUB_NAME}${HUB_SOCKET_EXTENSION}"
+      
+      if containsRegexp MCONSOLE_CMD "${DEVICE}=daemon,,,"; then
+         warning "$SCRIPTNAME" "$CMDLINE" "$0" "Duplicate interface: $DEVICE."
+         exit 1
+      fi
+      
+      if [ -z "$BE_QUIET" ]; then
+         if [ $FIRSTLINE != 1 ]; then
+            echo -n "               "
+         fi
+         if [ ! -z "$HUB_NAME" ]; then
+            echo "${DEVICE} @ ${HUB_NAME}\t(${HUB_SOCKET})"
+         else
+            echo "${DEVICE} removed"
+         fi
+      fi
+      
+      if [ -z "$HUB_NAME" ]; then
+         MCONSOLE_CMD="$MCONSOLE_CMD $DEVICE"
+      else
+         MCONSOLE_CMD="$MCONSOLE_CMD $DEVICE=daemon,,,$HUB_SOCKET"
+      fi
+      
+      if [ ! -z "$HUB_NAME" ]; then
+         if [ ! -z "$TAP_ADDRESS" ]; then
+            HUBLIST="$HUBLIST $HUB_SOCKET,$TAP_ADDRESS,$GUEST_ADDRESS"
+         else
+            HUBLIST="$HUBLIST $HUB_SOCKET"
+         fi
+      fi
+      FIRSTLINE=0
+      shift
+   done
+}
+
+
+# This function invokes mconsole in order to attach/remove interfaces from
+# running virtual machines.
+invokeMconsole() {
+   local ACTION EVAL_THIS INTERFACE
+   while [ $# -gt 0 ]; do
+      EVAL_THIS=`echo $1 | awk -v FS="=" \
+         '{
+            if (NF==1) {
+               print "ACTION=\"remove " $0 "\""
+               print "ACTION_DESC=\"remove\""
+            }
+            else {
+               print "ACTION=\"config " $0 "\""
+               print "ACTION_DESC=\"add\""
+            }
+            print "INTERFACE=" $1
+         }'`
+      eval "$EVAL_THIS"
+      run_command "$JUST_PRINT" "$NETKIT_HOME/bin/uml_mconsole $VMINFO_NAME $ACTION" \
+         "$NETKIT_HOME/bin/uml_mconsole $VMINFO_NAME $ACTION 2>&1 | \
+          awk '/^ERR/ {gsub(\"^ERR *\", \"\"); print \"Failed to '$ACTION_DESC' interface: \" \$0}' 2>&1"
+      shift
+   done
+}
+
+
+################## Actually configure interfaces ##################
+
+if echo $VM_ID | grep -qE "^[0-9]+$"; then
+   # This is a virtual machine PID
+   if ! getVMinfoByPID "$VM_ID"; then
+      echo 1>&2 "$SCRIPTNAME: no virtual machine having PID $VM_ID exists."
+      exit 1
+   fi
+else
+   # This is a virtual machine name
+   if ! getVMinfoByName "$USER" "$VM_ID"; then
+      echo -n 1>&2 "$SCRIPTNAME: no virtual machine named \"$VM_ID\" exists"
+      if [ ! -z "$USER" ]; then
+         echo " for user $USER."
+      else
+         echo "."
+      fi
+      exit 1
+   fi
+fi
+
+
+if [ -z "$BE_QUIET" ]; then
+   echo
+   echo "============= Configuring virtual machine \"$VMINFO_NAME\" (PID $VMINFO_PID) ============="
+   echo "   Virtual machine owner: $VMINFO_USER"
+fi
+
+
+##### Setup network interfaces
+if [ ! -z "$ETH_INTERFACES" ]; then
+   [ -z "$BE_QUIET" ] && echo -n "   Interfaces: "
+   eval setupInterfaces $ETH_INTERFACES
+fi
+
+##### Start network hubs
+eval runHubs $HUBLIST
+
+##### Attach/remove network interfaces
+eval invokeMconsole "$MCONSOLE_CMD"
+
+[ -z "$BE_QUIET" ] && echo

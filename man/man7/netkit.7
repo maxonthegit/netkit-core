@@ -1,0 +1,165 @@
+.TH NETKIT 7 "November 2009" "" Netkit
+.SH NAME
+Netkit \- The NETwork emulation toolKIT
+
+
+\" ########################################
+
+.SH DESCRIPTION
+
+Netkit is a self-contained low cost solution for the emulation of computer
+networks. Within the Netkit environment each network device is implemented
+by a virtual machine, and interconnection links are emulated by using virtual
+collision domains (which you can see as virtual hubs).
+
+Each virtual machine can be configured to have an arbitrary number of (virtual)
+network interfaces. Virtual machines can also be configured to have no interfaces
+at all, in which case they can serve as standalone emulated hosts.
+However, this is not the application Netkit has been thought for. Netkit is \fBnot\fR
+a host emulator: it is a network emulator.
+
+Virtual machines use a customized filesystem which contains a standard Linux
+installation (at the time this man page
+is being written, it is a Debian distribution), which includes network
+oriented software such as routing daemons (RIP, OSPF, etc.), a bunch of servers
+(FTP, HTTP, etc.), firewalling utilities (iptables), diagnostic tools (ping, traceroute,
+tcpdump, etc.), and other applications. By configuring the appropriate software,
+it is possible to make a virtual machine behave as a specific network device
+(e.g., a router). See the README in the Netkit filesystem package or the online
+FAQs for instructions about changing the contents of the virtual machine
+filesystems.
+
+Virtual machines make use of a variant of the standard Linux kernel which is
+compiled to be run as a userspace process. This variant is known as \fIUser Mode
+Linux\fR (\fIUML\fR) kernel. You can find more information about UML at the
+\fIUser-mode Linux Kernel Page\fR (\fIhttp://user-mode-linux.sourceforge.net\fR).
+See also the README in the Netkit kernel package for information about building
+a customized kernel for the virtual machines.
+
+Netkit provides you with two alternative interfaces to start and configure virtual
+machines. A set of `v'\-prefixed commands (\fIvclean\fR, \fIvconfig\fR,
+\fIvcrash\fR, \fIvhalt\fR, \fIvlist\fR, \fIvstart\fR), which allow to start and
+manage single virtual machines while providing finegrained control on their
+configuration, and a set of `l'\-prefixed commands (\fIlclean\fR, \fIlcrash\fR,
+\fIlhalt\fR, \fIlinfo\fR, \fIlrestart\fR, \fIlstart\fR, \fIltest\fR), which ease setting up
+preconfigured network laboratories consisting of several virtual machines.
+
+
+\" ########################################
+
+.SH "ENVIRONMENT VARIABLES"
+
+In order for Netkit to work properly, the environment variable \fBNETKIT_HOME\fR
+must be set to the name of the directory Netkit has been installed into.
+.br
+The \fBVLAB_HOME\fR variable is recognized as well, but this only happens for
+backward compatibility. New Netkit installations and upgrades should use
+\fBNETKIT_HOME\fR instead.
+
+
+\" ########################################
+
+.SH FILES
+
+Netkit stores its default configuration settings inside a file named
+`netkit.conf'. The existence of this file is required in order to make
+Netkit work. See \fBnetkit.conf\fR(5) for information about the location of this
+file and a description of its format.
+
+
+\" ########################################
+
+.SH "SEE ALSO"
+\fIlclean\fR(1),
+\fIlcrash\fR(1),
+\fIlhalt\fR(1),
+\fIlinfo\fR(1),
+\fIlrestart\fR(1),
+\fIlstart\fR(1),
+\fIltest\fR(1),
+\fIvclean\fR(1),
+\fIvconfig\fR(1),
+\fIvcrash\fR(1),
+\fIvhalt\fR(1),
+\fIvlist\fR(1),
+\fIvstart\fR(1),
+\fIlab.conf\fR(5),
+\fIlab.dep\fR(5),
+\fInetkit.conf\fR(5),
+Netkit filesystem README,
+Netkit kernel README,
+\fINetkit Home Page\fR
+.nh
+(\fIhttp://www.netkit.org\fR),
+.hy
+\fIThe Linux Kernel Archives\fR
+.nh
+(\fIhttp://www.kernel.org\fR),
+.hy
+\fIThe User-mode Linux Kernel Home Page\fR
+.nh
+(\fIhttp://user-mode-linux.sourceforge.net\fR).
+.hy
+
+
+\" ########################################
+
+.SH AUTHOR
+This man page: Massimo Rimondini
+
+\fINetkit\fR is the result of the joint work of several people. The
+project is carried on by the Department of Computer Science and Automation of the
+University of Roma 3
+.nh
+(\fIhttp://www.dia.uniroma3.it\fR).
+.hy
+More precisely, people at the LUG (Linux User Group) Roma 3
+.nh
+(\fIhttp://www.lugroma3.org/\fR)
+.hy
+gave the initial startup and brought significant contributions that made
+Netkit become a progressively more powerful environment. People within the
+Computer Networks Research Group
+.nh
+(\fIhttp://www.dia.uniroma3.it/~compunet\fR)
+.hy
+actively supported the LUG team by providing new ideas and implementing new
+features, and authored the most recent releases.
+
+At the time this man page is being written, the project is entirely carried on
+by the Computer Networks Research Group.
+
+The Netkit team currently consists of:
+.br
+Giuseppe Di Battista
+.br
+Maurizio Patrignani
+.br
+Maurizio Pizzonia
+.br
+Massimo Rimondini
+
+People involved across time also include:
+.br
+Andrea Cecchetti
+.br
+Lorenzo Colitti
+.br
+Matteo Corea
+.br
+Federico Mariani
+.br
+Stefano Pettini
+.br
+Flavia Picard
+.br
+Fabio Ricci
+
+The Netkit team can be reached at the following address: <contact@netkit.org>.
+You can also use this address to submit bug reports. Alternatively, you can contact
+us via the mailing list <netkit.users@dia.uniroma3.it>.
+
+
+\" ########################################
+
+.so include/bugreport.man

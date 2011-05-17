@@ -1,0 +1,116 @@
+#!/bin/sh
+
+#     Copyright 2004-2009 Massimo Rimondini - Computer Networks Research Group,
+#     Roma Tre University.
+#
+#     This file is part of Netkit.
+# 
+#     Netkit is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+# 
+#     Netkit is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+# 
+#     You should have received a copy of the GNU General Public License
+#     along with Netkit.  If not, see <http://www.gnu.org/licenses/>.
+
+# This is a support script that configures a TUN/TAP interface for connecting
+# a virtual machine to the Internet.
+# It is not intended for standalone usage.
+
+: ${NETKIT_HOME:=$VLAB_HOME}
+
+# Script arguments follow (arguments from 2 to 5 are only required when action
+# is "start").
+ACTION=$1         # either "start" or "stop"
+USER_NAME=$2      # name of the user the tunnel is being configured for
+TAP_ADDRESS=$3    # address of the (host side) tap interface
+GUEST_ADDRESS=$4  # address of the (virtual machine side) guest interface 
+HUB_NAME=$5       # name of the virtual hub
+
+
+TAP_DEVICE="nk_tap_$USER_NAME"
+
+
+# Include some important entries inside the path
+export PATH=$PATH:/bin:/usr/bin:/usr/local/bin:/sbin:/usr/sbin:/usr/local/sbin
+
+# Use the correct syntax for echo, depending on the shell being used
+if type source > /dev/null 2>&1; then
+	# We are using bash
+	alias echo="echo -e"
+fi
+
+case $ACTION in
+   start)
+      if [ ! -c /dev/net/tun ]; then
+         # Create /dev/net/tun device
+         echo -n "Creating /dev/net/tun device...\t\t"
+         mknod -m 666 /dev/net/tun c 10 200 && echo "done." || exit 1
+      fi
+      
+      echo -n "Bringing down $TAP_DEVICE (if any)...\t"
+      ifconfig $TAP_DEVICE down > /dev/null 2>&1
+      echo "done."
+      
+      echo -n "Bringing down tunnel (if any)...\t"
+      tunctl -d $TAP_DEVICE > /dev/null 2>&1
+      echo "done."
+      
+      echo -n "Setting up tunnel...\t\t\t"
+      tunctl -u $USER_NAME -t $TAP_DEVICE > /dev/null && echo "done." || exit 1
+      
+      echo -n "Bringing up $TAP_DEVICE...\t\t"
+      ifconfig $TAP_DEVICE $TAP_ADDRESS up && echo "done." || exit 1
+      
+      echo -n "Setting permissions for /dev/net/tun...\t"
+      chmod 666 /dev/net/tun && echo "done." || exit 1
+      
+      echo -n "Enabling IP forwarding...\t\t"
+      echo 1 > /proc/sys/net/ipv4/ip_forward && echo "done." || exit 1
+      
+      if which iptables > /dev/null 2>&1; then
+         if ! iptables -n -t nat -L POSTROUTING | grep -q "MASQUERADE"; then
+            echo -n "Enabling masquerading...\t\t"
+            iptables -t nat -A POSTROUTING -j MASQUERADE && echo "done." || exit 1
+         fi
+         if ! iptables -n -vL FORWARD | grep -q "ACCEPT.*nk_tap_\+"; then
+            echo -n "Opening firewall for tunnel...\t\t"
+            iptables -I FORWARD -i nk_tap_+ -j ACCEPT && echo "done." || exit 1
+         fi
+      fi
+      ;;
+
+   stop)
+      if which iptables > /dev/null 2>&1; then
+         if iptables -n -vL FORWARD | grep -q "ACCEPT.*nk_tap_\+"; then
+            echo -n "Closing firewall...\t\t\t\t"
+            iptables -D FORWARD -i nk_tap_+ -j ACCEPT && echo "done." || exit 1
+         fi
+         if iptables -n -t nat -L POSTROUTING | grep -q "MASQUERADE"; then
+            echo -n "Disabling masquerading...\t\t\t"
+            iptables -t nat -D POSTROUTING -j MASQUERADE && echo "done." || exit 1
+         fi
+      fi
+      
+      echo -n "Disabling IP forwarding...\t\t\t"
+      echo 0 > /proc/sys/net/ipv4/ip_forward && echo "done." || exit 1
+      
+      echo "Bringing down tap devices and tunnels:"
+      for INTERFACE in `cat /proc/net/dev | awk -v FS=":" '/nk_tap_/ {print $1}'`; do
+         echo -n "\t$INTERFACE...\t\t\t"
+         ifconfig $INTERFACE down > /dev/null 2>&1 && echo "done." || exit 1
+         echo -n "\t$INTERFACE tunnel...\t\t"
+         tunctl -d $INTERFACE > /dev/null 2>&1 && echo "done." || exit 1
+      done
+      echo "Done."
+      
+      echo -n "Resetting permissions for /dev/net/tun...\t"
+      chmod 660 /dev/net/tun && echo "done." || exit 1
+      ;;
+
+esac

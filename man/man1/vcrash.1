@@ -1,0 +1,194 @@
+.TH VCRASH 1 "July 2010" "" "Netkit"
+.SH NAME
+vcrash \- crash a running netkit virtual machine
+.SH SYNOPSIS
+\fBvcrash\fR [options] \fIMACHINE\-ID\fR...
+
+
+\" ########################################
+
+.SH DESCRIPTION
+
+The \fIvcrash\fR command can be used to forcedly halt running virtual machines.
+It allows both to stop machines immediately (i.e., without having to go through
+their shutdown sequence) and to kill frozen machines. \fIMACHINE\-ID\fR can be
+either the PID or the name of a virtual machine.
+
+This command is quite similar to \fIvhalt\fR (see \fBvhalt\fR(1)), except that
+it is faster and its effect is comparable to that of unplugging the virtual machine
+power cord (as opposed to gracefully shutdown it). This also implies that crashed
+virtual machines will perform a file system integrity check upon their next boot.
+
+The following options can be used to influence the way \fIvcrash\fR behaves.
+
+.TP
+.B
+-k
+.PD 0
+.TP
+.B
+--kill
+By default, virtual machines are crashed by sending them a special directive
+through their management console (mconsole) socket. Such method is generally
+faster, but in some situations it may not work properly (for example, if a
+virtual machine is somewhy frozen). If an attempt to crash a virtual machine
+via the mconsole fails, \fIvcrash\fR automatically tries hard to kill the
+virtual machine processes.
+.br
+By using this option, the attempt with the mconsole socket is simply skipped,
+and \fIvcrash\fR directly kills virtual machine processes. This should work in
+most cases. If still it does not, try using \fIvclean\fR (see \fBvclean\fR(1)).
+
+.TP
+.B
+-q
+.PD 0
+.TP
+.B
+--quick
+.PD 0
+.TP
+.B
+--quiet
+After crashing virtual machines, \fIvcrash\fR waits a few instants to check
+whether they have actually stopped. By using the \fB\-q\fR (\fB\-\-quick\fR,
+\fB\-\-quiet\fR) option, \fIvcrash\fR exits immediately, without waiting for the
+machine to stop. This option also suppresses any kind of output except errors
+and warnings.
+.br
+Notice that, when a virtual machine is crashed via its mconsole socket (default
+if the \fB\-k\fR option is not used), \fIvcrash\fR still waits for the crash
+directive to reach the virtual machine before returning, even when using the
+\fB\-q\fR option. The reason why this is necessary is simple: if somehy the
+directive does not reach the virtual machine within a predefined timeout,
+\fIvcrash\fR takes care of quitting the mconsole helper tool before exiting,
+thus getting rid of unuseful hanging processes.
+      
+.TP
+.B
+-r
+.PD 0
+.TP
+.B
+--remove-fs
+Delete virtual machine (COW) filesystem after halting machine. This option does not
+affect in any way the model filesystem. In particular, using this option has no
+effect on machines started with the \fB\-\-no\-cow\fR or \fB\-W\fR option.
+See the README in the Netkit filesystem package for more information about COW
+and model filesystems.
+
+.TP
+.B
+--test
+Instead of actually crashing virtual machines, just show what would be done
+(i.e., which processes would be killed or which socket would be used to send
+the crash directive). This option cannot be used in conjunction with \fB\-q\fR
+(or \fB\-\-quick\fR, \fB\-\-quiet\fR).
+
+.TP
+.B
+-u \fIUSERNAME\fR
+.PD 0
+.TP
+.B
+--user=\fIUSERNAME\fR
+This option limits the range of action of \fIvcrash\fR to machines owned by user
+\fIUSERNAME\fR (i.e., only \fIUSERNAME\fR's machines can be killed). This is
+useful, for example, if you need to crash someone else's machines (which requires
+administrative privileges). By default, \fIvcrash\fR only operates on virtual
+machines owned by the current user (the one who issued the \fIvcrash\fR command).
+The special user name `\fB\-\fR' is reserved, and can be used to crash machines
+regardless of their owner.
+
+Consider that different users may be running virtual machines having the same
+name. Hence, special care must be taken when using the `\fB\-\-user=-\fR'
+option and one or more \fIMACHINE\-ID\fRs are virtual machine names. In this
+case, if two (or more) users are running virtual machines having the same \fIname\fR,
+then only the one returned by
+.nh
+`vlist --user=- \fIname\fR'
+.hy
+is halted.
+                      
+.PP
+
+\fIvcrash\fR also supports the following options:
+
+.TP
+.B
+-h
+.PD 0
+.TP
+.B
+--help
+Show usage information.
+
+.TP
+.B
+--version
+Print information about the installed Netkit release and the host kernel version
+and exit. If ``\fI<unavailable>\fR'' is printed instead of a version number,
+then the corresponding information could not be retrieved (for example because
+a non-standard Netkit kernel or filesystem is being used).
+
+
+
+\" ########################################
+
+.SH "ENVIRONMENT VARIABLES"
+
+All Netkit commands require that the \fBNETKIT_HOME\fR variable contains the
+name of the directory Netkit is installed in.
+
+Apart from this, \fIvcrash\fR supports no other environment variables.
+
+
+\" ########################################
+
+.SH BACKWARD COMPATIBILITY
+
+The following options are deprecated and you are encouraged not to use them. They
+are only provided to ensure backward compatibility with older versions of Netkit.
+
+.TP
+.B
+--force
+This option can be used to crash a virtual machine for which both the PID and
+the name are known. When using \fB\-\-force\fR, \fIvcrash\fR switches to an
+alternative syntax. In particular, it takes exactly two arguments: the virtual
+machine PID and its name. Option \fB\-r\fR or \fB\-\-remove-fs\fR does not work
+when using \fB\-\-force\fR.
+
+This option had been introduced (but was undocumented) in older versions of
+\fIvcrash\fR with the purpose of speeding up the process of halting laboratories.
+With the current version of \fIvcrash\fR there isn't any reason to use it (not
+even for speeding up the crash).
+
+.TP
+.B
+--root
+A synonym for \fB\-\-user\fR=\fB-\fR.
+
+
+\" ########################################
+
+.SH "SEE ALSO"
+\fIvclean\fR(1),
+\fIvconfig\fR(1),
+\fIvhalt\fR(1),
+\fIvlist\fR(1),
+\fIvstart\fR(1),
+Netkit filesystem README.
+
+
+\" ########################################
+
+.SH AUTHOR
+\fIvcrash\fR script: Massimo Rimondini
+.br
+This man page: Massimo Rimondini, Fabio Ricci
+
+
+\" ########################################
+
+.so include/bugreport.man

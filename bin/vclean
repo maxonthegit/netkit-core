@@ -1,0 +1,344 @@
+#!/bin/sh
+
+#     Copyright 2002-2009 Maurizio Patrignani, Maurizio Pizzonia, Fabio Ricci,
+#     Massimo Rimondini - Computer Networks Research Group, Roma Tre University.
+#
+#     This file is part of Netkit.
+# 
+#     Netkit is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+# 
+#     Netkit is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+# 
+#     You should have received a copy of the GNU General Public License
+#     along with Netkit.  If not, see <http://www.gnu.org/licenses/>.
+
+# This is the Netkit vclean script, which can be used to remove unused virtual
+# hubs, hanging UML kernels and configured tunnels.
+
+SCRIPTNAME=`basename $0`
+
+# The following line has been introduced to ensure backward compatibility
+: ${NETKIT_HOME:=$VLAB_HOME}
+
+if [ -z "$NETKIT_HOME" ]; then
+   echo 1>&2 "$SCRIPTNAME: The NETKIT_HOME environment variable is not properly set;"
+   echo 1>&2 "please set it as described in the Netkit documentation and try"
+   echo 1>&2 "again."
+   exit 1
+fi
+
+CMDLINE="$0 $*"
+
+. "$NETKIT_HOME/bin/script_utils"
+
+# Write to the vcommands log
+logWrite $0 $*
+
+
+# This function is used to print the vclean usage
+help() {
+   echo
+   echo "Usage: $SCRIPTNAME [options]"
+   cat << END_OF_HELP
+
+This script can be used to perform the following cleanup operations:
+- kill processes associated to unused (or all) virtual hubs;
+- kill running virtual machines;
+- remove host-side configurations set up for tap interfaces.
+
+By default, the script just removes unused virtual hubs. Other actions can be
+triggered by using the following options:
+
+      --clean-all      A synonym for -HKT (use with care).
+  -H, --remove-hubs    Just kill unused virtual hubs. This is the default,
+                       unless another action has been explicitly requested.
+  -K, --kill-machines  Kill all running virtual machines and virtual hubs. This
+                       corresponds to crashing all running virtual machines
+                       (even those that are frozen) and the virtual hubs they
+                       are attached to.
+  -T, --remove-tunnels Remove tunnels and other configuration settings that have
+                       been altered in order to set up "tap" collision domains.
+                       This is not a per-user action: using this option will
+                       remove every host-side configuration that has been set up
+                       to use tap interfaces.
+                       This operation requires administrative privileges. The
+                       script will take care of asking for the root password
+                       if required.
+                       Please read the Netkit documentation before using this
+                       option.
+      --test           Do not actually stop virtual machines and hubs: just
+                       show which processes would be killed. This option cannot
+                       be used when working in quiet mode.
+                       Action --remove-tunnels is not affected by this option.
+  -u, --user=USERNAME  Perform operations on processes and tunnels owned by user
+                       USERNAME. By using the special user name '-' all the
+                       processes are affected, regardless of their user (this
+                       requires administrative privileges).
+                       Action --remove-tunnels is not affected by this option.
+
+Other options are:
+  
+  -h, --help           Show this help.
+  -q, --quick
+      --quiet          Quiet mode (suppress any output except errors and
+                       warnings). Also, do not check whether processes have been
+                       actually stopped. This option cannot be used in
+                       conjunction with --test.
+      --version        Print version information and exit.
+                   
+END_OF_HELP
+}
+
+
+# Get command line options
+INVALID_OPTION=0
+OPT_LIST="clean-all,kill-machines,remove-hubs,remove-tunnels,user:,help,quiet,quick,test,version"
+CMDLINE_OPTIONS=`getopt -ql "$OPT_LIST" -- "HKTu:hq" "$@"`
+if [ $? -gt 0 ]; then
+   INVALID_OPTION=1
+fi
+
+
+
+USER=$USERID
+
+
+# Parse command line options
+parseCmdLine() {
+	local CURRENT_ARGUMENT
+   while [ $# -gt 0 ]; do
+		CURRENT_ARGUMENT="$1"
+      case "$CURRENT_ARGUMENT" in
+      
+         --clean-all)
+            KILL_MACHINES=1
+            REMOVE_TUNNELS=1;;
+         
+         -H|--remove-hubs)
+            REMOVE_UNUSED_HUBS=1;;
+         
+         -K|--kill-machines)
+            KILL_MACHINES=1;;
+         
+         -T|--remove-tunnels)
+            REMOVE_TUNNELS=1;;
+            
+         --test)
+            TEST_MODE=1;;
+            
+         --user|-u)
+            shift; CURRENT_ARGUMENT="$1"
+            if [ "x$CURRENT_ARGUMENT" = "x" ]; then
+               warning "$SCRIPTNAME" "$CMDLINE" "$0" \
+                       "Expecting username."
+               exit 1
+            fi
+            checkSpaces "$CURRENT_ARGUMENT"
+            if [ "$CURRENT_ARGUMENT" = "-" ]; then
+               USER=""
+            else
+               USER=$CURRENT_ARGUMENT
+            fi;;
+            
+         --help|-h)
+            help
+            exit;;
+            
+         -q|--quiet|--quick)
+            BE_QUIET=1;;
+            
+         --version)
+            showVersion
+            exit 0;;
+            
+         --)
+            shift
+            break;;
+      esac
+      shift
+   done
+   
+   if [ $# -gt 0 ]; then
+      warning "$SCRIPTNAME" "$CMDLINE" "$0" "Too many arguments: $*"
+      exit 1
+   fi
+}
+eval parseCmdLine $CMDLINE_OPTIONS
+
+
+# Check whether user gave some strange options
+if [ $INVALID_OPTION -eq 1 ]; then
+   warning "$SCRIPTNAME" "$CMDLINE" "$0" "Invalid option or missing option parameter."
+   exit 1
+fi
+
+
+# Test mode is senseless if working in quiet mode
+if [ ! -z "$TEST_MODE" -a ! -z "$BE_QUIET" ]; then
+   warning "$SCRIPTNAME" "$CMDLINE" "$0" "Option --test cannot be used when working in quiet mode."
+   exit 1
+fi
+
+# Actions --remove-hubs and --kill-machines are incompatible
+if [ ! -z "$REMOVE_UNUSED_HUBS" -a ! -z "$KILL_MACHINES" ]; then
+   warning "$SCRIPTNAME" "$CMDLINE" "$0" "Actions --remove-hubs and --kill-machines cannot be performed at the same time."
+   exit 1
+fi
+
+# Enable default action (remove unused virtual hubs) if none has been requested
+if [ -z "$KILL_MACHINES" -a -z "$REMOVE_TUNNELS" ]; then
+   REMOVE_UNUSED_HUBS=1
+fi
+
+
+
+
+
+# This function takes care of killing processes. The only argument is a command
+# which should be executed in order to get the list of processes to be killed.
+# If not in quiet mode (i.e., BE_QUIET is not set), processes are first sent the
+# TERM signal and, if some process still survives, it is sent the KILL signal. If
+# in quiet mode, processes are simply KILLed.
+killProcesses() {
+   PROCESSES=`eval $1`
+   if [ -z "$PROCESSES" ]; then
+      # There are no processes to be killed
+      [ -z "$BE_QUIET" ] && echo "   None is currently running."
+      return
+   fi
+   [ -z "$BE_QUIET" ] && echo "   PIDs: $PROCESSES"
+   if [ ! -z "$TEST_MODE" ]; then
+      # We are in test mode: just show which processes would be killed
+      return
+   fi
+   if [ -z "$BE_QUIET" ]; then
+      echo -n "   Killing... "
+      # Signalling processes twice ensures they stop even
+      # if they need to be killed in a certain order
+      kill -TERM $PROCESSES > /dev/null 2>&1
+      kill -TERM $PROCESSES > /dev/null 2>&1
+      sleep 1
+      PROCESSES=`eval $1`
+      if [ ! -z "$PROCESSES" ]; then
+         echo -n "killing harder... "
+         kill -KILL $PROCESSES > /dev/null 2>&1
+         kill -CONT $PROCESSES > /dev/null 2>&1
+         sleep 1
+         PROCESSES=`eval $1`
+         if [ ! -z "$PROCESSES" ]; then
+            echo "failed!"
+         else
+            echo "done."
+         fi
+      else
+         echo "done."
+      fi
+   else
+      # Just kill processes, with no output
+      kill -KILL $PROCESSES > /dev/null 2>&1
+      kill -CONT $PROCESSES > /dev/null 2>&1
+   fi   
+}
+
+
+# This function kills (if not in test mode) unused virtual hubs and removes
+# the corresponding socket files. Arguments are space separated pairs
+# "switch_PID socket_name".
+killHubs() {
+   local HUB_PID HUB_NAME FOUND_UNUSED_HUB
+   FOUND_UNUSED_HUB=0
+   while [ $# -gt 0 ]; do
+      HUB_PID=$1
+      shift
+      HUB_NAME=$1
+      if [ `lsof -p $HUB_PID 2>/dev/null | grep -c $HUB_NAME` -le 1 ]; then
+         # No more virtual machines are using the hub connected to this socket
+         FOUND_UNUSED_HUB=1
+         [ -z "$BE_QUIET" ] && echo -n "   $HUB_NAME (PID $HUB_PID)"
+         if [ -z "$TEST_MODE" ]; then
+            # The fact that we are in test mode ensures that we are not in
+            # quiet mode.
+            echo -n ": Killing... "
+            kill $HUB_PID > /dev/null 2>&1 && rm $HUB_NAME 2>/dev/null
+            echo -n "done."
+         fi
+         [ -z "$BE_QUIET" ] && echo
+      fi
+      shift
+   done
+   [ "$FOUND_UNUSED_HUB" -eq 0 -a -z "$BE_QUIET" ] && echo "   No unused virtual hubs have been found."
+}
+
+
+
+if [ -z "$USER" ]; then
+   USER_STRING="all users"
+else
+   USER_STRING="user $USER"
+fi
+
+
+######################## Actually perform actions
+
+# Remove unused hubs (if asked to)
+if [ ! -z "$REMOVE_UNUSED_HUBS" ]; then
+   # Just remove unused switches
+   [ -z "$BE_QUIET" ] && echo "Killing unusued virtual hubs owned by $USER_STRING:"
+   HUB_PIDS_NAMES=`ps -wwwwwweo user=ENSURE_USER_NAME_COLUMN_IS_VERY_WIDE,pid,command | grep -w "$USER" | grep "uml_switch .*-unix" | \
+                   grep -v grep | awk '{print $2 " " $NF}'`
+   killHubs $HUB_PIDS_NAMES
+fi
+
+
+# Kill running virtual machines and hubs (if asked to)
+if [ ! -z "$KILL_MACHINES" ]; then
+   # Kill all running virtual machine kernels and all virtual hubs
+   [ -z "$BE_QUIET" ] && echo "Killing virtual machines owned by $USER_STRING:"
+   killProcesses "ps -wwwwwweo user=ENSURE_USER_NAME_COLUMN_IS_VERY_WIDE,pid,command | grep -w \"^$USER\" | \
+                  grep -Ew \"(name=.+ .*umid=.+)|(port-helper)|(\[netkit-kernel\])\" | grep -v grep | \
+                  awk '{printf \"%i \",\$2} END {printf \"\\n\"}'"
+   [ -z "$BE_QUIET" ] && echo "Killing virtual hubs owned by $USER_STRING:"
+   killProcesses "ps -wwwwwweo user=ENSURE_USER_NAME_COLUMN_IS_VERY_WIDE,pid,command | grep -w \"^$USER\" | \
+                  grep \"uml_switch .*-unix\" | grep -v grep | \
+                  awk '{printf \"%i \",\$2} END {printf \"\\n\"}'"
+fi
+
+
+# Remove tunnel configurations (if asked to)
+if [ ! -z "$REMOVE_TUNNELS" ]; then
+   # Remove any previously configured tunnel
+   if [ -z "$BE_QUIET" ]; then
+      echo "************* Removing tap configurations ************"
+      echo "   This will affect tap configurations for $USER_STRING."
+      echo "******** This operation requires root privileges ********"
+   fi
+   if [ "$USE_SUDO" = "yes" ]; then
+      # Default sudo configuration resets environment variables for security
+      # reasons (depends on the configuration in sudoers, and may happen even
+      # when using -E)
+      PRESERVE_ENV=$(env | egrep "(^NETKIT)|(^PATH=)")
+      TUNTAP_COMMAND="sudo -p \"$USER's password:\" /bin/sh -c \"eval $PRESERVE_ENV; $NETKIT_HOME/bin/manage_tuntap stop\""
+   else
+      TUNTAP_COMMAND="su -mc \"$NETKIT_HOME/bin/manage_tuntap stop\""
+   fi
+   if [ -z "$BE_QUIET" ]; then   
+      run_command "" \
+                  "$NETKIT_HOME/bin/manage_tuntap stop" \
+                  "$TUNTAP_COMMAND" || \
+                     { echo 1>&2 "Error while removing tap configurations"; exit 1; }
+   else
+      run_command "" \
+                  "$NETKIT_HOME/bin/manage_tuntap stop" \
+                  "$TUNTAP_COMMAND\"" >/dev/null || \
+                     { echo 1>&2 "Error while removing tap configurations"; exit 1; }
+   fi
+
+   [ -z "$BE_QUIET" ] && echo "************** Abandoning root privileges ***************"
+   [ -z "$BE_QUIET" ] && echo
+fi

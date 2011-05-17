@@ -1,0 +1,289 @@
+#!/bin/sh
+
+#     Copyright 2009 Massimo Rimondini - Computer Networks Research Group,
+#     Roma Tre University.
+#
+#     This file is part of Netkit.
+# 
+#     Netkit is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+# 
+#     Netkit is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+# 
+#     You should have received a copy of the GNU General Public License
+#     along with Netkit.  If not, see <http://www.gnu.org/licenses/>.
+
+# Part of the completion routines is significantly inspired to the scripts in
+# the bash-completion package.
+
+# The following line has been introduced to ensure backward compatibility
+: ${NETKIT_HOME:=$VLAB_HOME}
+
+if [[ -z "$NETKIT_HOME" ]]; then
+   echo 1>&2 "$SCRIPTNAME: The NETKIT_HOME environment variable is not properly set;"
+   echo 1>&2 "please set it as described in the Netkit documentation and try"
+   echo 1>&2 "again."
+   exit 1
+fi
+
+# The following is required to get the value of MAX_INTERFACES. Since this file
+# is expected to be sourced, we should avoid sourcing the script_utils file here
+# because this would result in several environment variables (e.g., VM_MEMORY,
+# etc.) being permanently fixed in the user's environment, which is not what we
+# want.
+MAX_INTERFACES=$( . "$NETKIT_HOME/bin/script_utils"; echo $MAX_INTERFACES; )
+
+_command_options() {
+   # Long options
+   $NETKIT_HOME/bin/$1 --help | sed -r '/^ +-/!d; /--[-[:alnum:]]+=?/!d; s/.*(--[-[:alnum:]]+=?).*/\1/' | sort | uniq
+   # Short options
+   $NETKIT_HOME/bin/$1 --help | sed -r '/^ +-/!d; /^ +-[^ -]/!d; s/^ +(-[^ -]).*/\1/' | sort | uniq
+}
+
+_intelligent_space() {
+   while [[ $# -gt 0 ]]; do
+      # Append a space if the current completion does not end in "=" or ","
+      if echo "$1" | grep -q "=$" || echo "$1" | grep -q ",$"; then
+         COMPREPLY=( "${COMPREPLY[@]}" "$1" )
+      else
+         COMPREPLY=( "${COMPREPLY[@]}" "$1 " )
+      fi
+      shift
+   done
+}
+
+_intelligent_file_dir() {
+   # Append "/" or a space at the end of a path name, if that is the only
+   # possible completion. The first argument must be "f" if we are attempting
+   # to complete a file name, or "d" if we are attempting to complete a directory
+   # name.
+   local MODE
+   MODE=$1
+   shift
+   if [[ $# -eq 1 ]]; then
+      # Single completion available
+      if [[ -d "$1" ]]; then
+         if [[ "$MODE" = "d" ]]; then
+            # Check whether there are other directories in the subtree
+            if [[ -z "$(find "$1" -mindepth 1 -maxdepth 1 -type d 2>/dev/null)" ]]; then
+               COMPREPLY=( "$1/ " )
+            else
+               COMPREPLY=( "$1/" )
+            fi
+         else
+            COMPREPLY=( "$1/" )
+         fi
+      else
+         [[ "$MODE" = "d" ]] && COMPREPLY=( "$1" ) || COMPREPLY=( "$1 " )
+      fi
+   else
+      # Multiple completions: pass them over
+      while [[ $# -gt 0 ]]; do
+         COMPREPLY=( "${COMPREPLY[@]}" "$1" )
+         shift
+      done
+   fi
+}
+
+_expand_eth_options() {
+   local WORDLIST
+   WORDLIST=""
+   while [[ $# -gt 0 ]]; do
+      if [[ "${1#--eth}" != "$1" ]]; then
+         for ((j=0; j<=$MAX_INTERFACES; j++)); do
+            WORDLIST="$WORDLIST --eth$j="
+         done
+      else
+         WORDLIST="$WORDLIST $1"
+      fi
+      shift
+   done
+   echo $WORDLIST
+}
+
+_set_cword_and_opts() {
+   CWORD=${COMP_WORDS[$COMP_CWORD]}
+   PREV_CWORD=""; OPT_NAME=""; OPT_VAL=""
+   [[ $COMP_CWORD -gt 1 ]] && PREV_CWORD=${COMP_WORDS[$COMP_CWORD-1]}
+   if [[ "$PREV_CWORD" = "=" ]]; then
+      OPT_VAL=$CWORD
+      PREV_CWORD=${COMP_WORDS[$COMP_CWORD-2]}
+      OPT_NAME=$PREV_CWORD
+   fi
+   [[ "$CWORD" = "=" ]] && OPT_NAME=$PREV_CWORD
+}
+
+_vstart() {
+   if [[ -z "$VSTART_ARGS" ]]; then
+      _set_cword_and_opts
+   fi
+   shopt -s extglob
+   case $PREV_CWORD in
+      --con[01])
+         _intelligent_space $(compgen -W "xterm this pty port: none" -- "$OPT_VAL");;
+      --eth+([0-9]))
+         WORDLIST="$(vlist -n | awk -v FS="@ *|, *" '{for (i=2; i<=NF; i+=2) {print $i}}' | sort | uniq) tap,"
+         _intelligent_space $(compgen -W "$WORDLIST" -- "$OPT_VAL");;
+      --mem|--append|-M)
+         COMPREPLY=( );;
+      --xterm)
+         _intelligent_space $(compgen -W "gnome konsole konsole-tab xterm" -- "$OPT_VAL");;
+      --hostlab|--hostwd)
+         _intelligent_file_dir d $(compgen -A directory -- "$OPT_VAL");;
+      --model-fs|--filesystem|--kernel|--exec)
+         _intelligent_file_dir f $(compgen -A file -- "$OPT_VAL");;
+      -k|-m|-f|-e)
+         _intelligent_file_dir f $(compgen -A file -- "$CWORD");;
+      -l|-w)
+         _intelligent_file_dir d $(compgen -A directory -- "$CWORD");;
+      *)
+         case $CWORD in
+            -*)
+               WORDLIST="$(_expand_eth_options $(_command_options vstart))"
+              _intelligent_space $(compgen -W "$WORDLIST" -- "$CWORD");;
+         esac;;
+   esac
+   unset VSTART_ARGS
+}
+
+_vconfig() {
+   _set_cword_and_opts
+   shopt -s extglob
+   case $PREV_CWORD in
+      --eth+([0-9]))
+         WORDLIST="$(vlist -n | awk '{print $NF}' | sort | uniq) tap,"
+         _intelligent_space $(compgen -W "$WORDLIST" -- "$OPT_VAL");;
+      --user)
+         WORDLIST=$(cat /etc/passwd | cut -d : -f 1)
+         _intelligent_space $(compgen -W "$WORDLIST" -- "$OPT_VAL");;
+      -u)
+         WORDLIST=$(cat /etc/passwd | cut -d : -f 1)
+         _intelligent_space $(compgen -W "$WORDLIST" -- "$CWORD");;
+      *)
+         case $CWORD in
+            -*)
+               WORDLIST="$(_expand_eth_options $(_command_options vconfig))"
+               _intelligent_space $(compgen -W "$WORDLIST" -- "$CWORD");;
+            *)
+               WORDLIST=$(vlist -n | awk '{print $2}')
+               _intelligent_space $(compgen -W "$WORDLIST" "$CWORD");;
+         esac;;
+   esac
+}
+
+_vmanage() {
+   _set_cword_and_opts
+   case $PREV_CWORD in
+      --user)
+         WORDLIST=$(cat /etc/passwd | cut -d : -f 1)
+         _intelligent_space $(compgen -W "$WORDLIST" -- "$OPT_VAL");;
+      -u)
+         WORDLIST=$(cat /etc/passwd | cut -d : -f 1)
+         _intelligent_space $(compgen -W "$WORDLIST" -- "$CWORD");;
+      *)
+         case $CWORD in
+            -*)
+               WORDLIST="$(_command_options $1)"
+               _intelligent_space $(compgen -W "$WORDLIST" -- "$CWORD");;
+            *)
+               WORDLIST=$(vlist -n | awk '{print $2}')
+               _intelligent_space $(compgen -W "$WORDLIST" -- "$CWORD");;
+         esac;;
+   esac
+}
+
+_vclean() {
+   _set_cword_and_opts
+   case $PREV_CWORD in
+      --user)
+         WORDLIST=$(cat /etc/passwd | cut -d : -f 1)
+         _intelligent_space $(compgen -W "$WORDLIST" -- "$OPT_VAL");;
+      -u)
+         WORDLIST=$(cat /etc/passwd | cut -d : -f 1)
+         _intelligent_space $(compgen -W "$WORDLIST" -- "$CWORD");;
+      *)
+         WORDLIST="$(_command_options vclean)"
+         _intelligent_space $(compgen -W "$WORDLIST" -- "$CWORD")
+   esac
+}
+
+_get_lab_dir() {
+   local GETDIR=0
+   for i in "${COMP_WORDS[@]}"; do
+      if [[ $GETDIR = 1 ]]; then
+         echo "$i"
+         return
+      fi
+      [[ "$i" = "-d" ]] && GETDIR=1
+   done
+   echo "$PWD"
+}
+
+# As long as there is no overlap on the option names of lcommands, the same
+# command line completion function can be used for all the commands.
+_lmanage() {
+   _set_cword_and_opts
+   case $PREV_CWORD in
+      --map)
+         _intelligent_space $(compgen -A file -- "$OPT_VAL");;
+      --pass)
+         CWORD="${OPT_VAL:--}"
+         PREV_CWORD=""
+         VSTART_ARGS=1
+         _vstart;;
+      -p|--wait) ;;
+      --verify)
+         _intelligent_space $(compgen -W "user builtin both" -- "$OPT_VAL");;
+      -w) ;;
+      -o)
+         CWORD="${CWORD:--}"
+         PREV_CWORD=""
+         VSTART_ARGS=1
+         _vstart;;
+      -d)
+         _intelligent_file_dir d $(compgen -A directory -- "$CWORD");;
+      -m)
+         _intelligent_file_dir f $(compgen -A file -- "$CWORD");;
+      *)
+         if ( ( [[ $COMP_CWORD -gt 3 ]] && [[ "${COMP_WORDS[$COMP_CWORD-3]}" = "--pass" ]] ) || \
+            ( [[ $COMP_CWORD -gt 4 ]] && [[ "${COMP_WORDS[$COMP_CWORD-4]}" = "--pass" ]] ) || \
+            ( [[ $COMP_CWORD -gt 2 ]] && [[ "${COMP_WORDS[$COMP_CWORD-2]}" = "-o" ]] ) || \
+            ( [[ $COMP_CWORD -gt 3 ]] && [[ "${COMP_WORDS[$COMP_CWORD-3]}" = "-o" ]] ) ) && \
+            ( [[ $CWORD = "=" ]] || [[ ${COMP_WORDS[$COMP_CWORD-1]} = "=" ]] ); then
+            [[ $CWORD = "=" ]] && CWORD=${COMP_WORDS[$COMP_CWORD-1]}
+            PREV_CWORD=${COMP_WORDS[$COMP_CWORD-1]}
+            [[ $PREV_CWORD = "=" ]] && PREV_CWORD=${COMP_WORDS[$COMP_CWORD-2]}
+            _vstart
+         else
+            WORDLIST="$(_command_options $1)"
+            LABDIR="$(_get_lab_dir)"
+            for i in $(compgen -A directory -- $LABDIR/$CWORD); do
+               MACHINE_NAME="$(basename $i)"
+               if [[ "$MACHINE_NAME" != "CVS" ]] && [[ "$MACHINE_NAME" != "_test" ]]; then
+                  WORDLIST="$WORDLIST $(basename $i)"
+               fi
+            done
+            _intelligent_space $(compgen -W "$WORDLIST" -- "$CWORD")
+         fi;;
+   esac
+}
+
+complete -o nospace -F _vstart vstart
+complete -o nospace -F _vclean vclean
+complete -o nospace -F _vconfig vconfig
+complete -o nospace -F _vmanage vcrash
+complete -o nospace -F _vmanage vhalt
+complete -o nospace -F _vmanage vlist
+complete -o nospace -F _lmanage lclean
+complete -o nospace -F _lmanage lcrash
+complete -o nospace -F _lmanage lhalt
+complete -o nospace -F _lmanage linfo
+complete -o nospace -F _lmanage lstart
+complete -o nospace -F _lmanage lrestart
+complete -o nospace -F _lmanage ltest
+

@@ -1,0 +1,136 @@
+.TH LCLEAN 1 "July 2010" "" Netkit
+.SH NAME
+lclean \- clean temporary files created after launching netkit lab
+.SH SYNOPSIS
+\fBlclean\fR [options] [\fIMACHINE-NAME\fR...]
+
+
+\" ########################################
+
+.SH DESCRIPTION
+\fIlclean\fR can be used to delete temporary files that have been created while
+running a Netkit lab. Some of the them are specific for
+each virtual machine, while others are unique for the whole lab. Some are
+written inside the directory from which \fIlstart\fR has been invoked, while
+others are placed inside the lab directory.
+.br
+Assuming that \fIlab\-path\fR is the directory where the lab is located,
+\fIlclean\fR deletes the following files, if found to exist:
+
+.RS
+ ./\fImachine\-name\fR.ready
+.br
+ ./\fImachine\-name\fR.disk
+.br
+ ./\fImachine\-name\fR.log (no longer produced by latest releases, but still
+ removed for backwards compatibility)
+.br
+\fIlab\-path\fR/readyfor.test
+.br
+.RE
+
+If invoked with no arguments, \fIlclean\fR removes temporary files for all the
+virtual machines that make up the lab (i.e., \fImachine\-name\fR is replaced
+by the name of each virtual machine). It is also possible to provide a list
+of \fIMACHINE\-NAME\fRs, in which case \fIlclean\fR just removes temporary
+files for those virtual machines (as well as the `readyfor.test' file).
+
+Removing virtual machines COW filesystems (.disk files) implies that virtual
+machines contents are reverted to their original state when the lab is restarted.
+Of course, any persistent part of the lab is preserved, including those files
+that are automatically copied inside virtual machines during the boot phase.
+
+See the README file in the Netkit filesystem package for more information about
+COW filesystems.
+
+The following options are supported by \fIlclean\fR:
+
+.TP
+.B
+\-d \fIDIRECTORY\fR
+Assume the Netkit lab that is located inside \fIDIRECTORY\fR. If no \fB\-d\fR
+option is provided, \fIlclean\fR assumes that the lab is located in the
+current directory. The path to the lab directory (being that the current
+directory or one provided by \fB\-d\fR) must never contain spaces.
+
+This piece of information is necessary in order to remove some of the temporary
+files and to retrieve the list of the virtual machines that make up the lab.
+
+.PP
+The following standard options are also supported.
+
+.TP
+.B
+\-h
+.PD 0
+.TP
+.B
+\-\-help
+Show usage information.
+
+.TP
+.B
+\-v
+.PD 0
+.TP
+.B
+\-\-verbose
+Show which files are being deleted.
+
+.TP
+.B
+\-\-version
+Print information about the installed Netkit release and the host kernel version
+and exit. If ``\fI<unavailable>\fR'' is printed instead of a version number,
+then the corresponding information could not be retrieved (for example because
+a non-standard Netkit kernel or filesystem is being used).
+
+
+
+
+\" ########################################
+
+.SH "ENVIRONMENT VARIABLES"
+
+All Netkit commands require that the \fBNETKIT_HOME\fR variable contains the
+name of the directory Netkit is installed in.
+
+Apart from this, \fIlclean\fR supports no other environment variables.
+
+\" ########################################
+
+.SH NOTES
+
+Despite the fact that the two command names sound similar, \fIlclean\fR has
+nothing to do with \fBvclean\fR(1). While \fIlclean\fR is a tool to get rid of
+temporary files inside a Netkit lab directory (i.e., it works on the host
+filesystem), \fBvclean\fR(1) is the Netkit ``panic button'', which allows to
+kill hanging processes and to restore settings that may have been altered by
+Netkit during past executions (firewall settings, configurations set up for tap
+interfaces, etc.).
+
+\" ########################################
+
+.SH "SEE ALSO"
+\fIlstart\fR(1),
+\fIlcrash\fR(1),
+\fIlhalt\fR(1),
+\fIlrestart\fR(1),
+\fIlinfo\fR(1),
+\fIltest\fR(1),
+\fIvclean\fR(1),
+Netkit filesystem README.
+    
+
+\" ########################################
+
+.SH AUTHOR
+
+\fIlclean\fR script: Stefano Pettini, Fabio Ricci, Massimo Rimondini
+.br
+This man page: Fabio Ricci, Massimo Rimondini
+
+
+\" ########################################
+
+.so include/bugreport.man

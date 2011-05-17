@@ -1,0 +1,564 @@
+.TH NETKIT.CONF 5 "July 2010" "" Netkit
+.SH NAME
+netkit.conf \- Netkit configuration file
+
+
+\" ########################################
+
+.SH DESCRIPTION
+
+This file contains information about the Netkit configuration. It also stores
+the default settings to be used when starting new virtual machines. A copy of
+this file can be placed into the standard directories listed in the \fBFILES\fR
+section. Thus, \fInetkit.conf\fR can be used to define both system wide and
+user specific settings.
+
+The file format is very simple. \fInetkit.conf\fR is nothing but a special shell
+script which contains definitions of environment variables. Hence, it is a list of
+\fIPARAMETER\fR=\fIVALUE\fR assignments.
+
+No check is performed on the correctness of the configuration, so \fIVALUE\fR
+must always be a valid setting (allowed range of values depends on the specific
+\fIPARAMETER\fR being considered). Failure to comply to this constraint may
+result in unpredictable behaviour. Moreover, it is very important that no
+\fIVALUE\fR contains space characters.
+
+\fIPARAMETER\fR can be one of the following.
+
+
+.SS
+Generic Netkit configuration parameters
+
+.TP
+.B
+LOGFILENAME
+Name of the file that stores a log of the issued Netkit commands. Every time a
+Netkit command is executed (e.g., \fIvstart\fR, \fIvhalt\fR, etc.), an entry
+containing the name of the command, the user who started it and a timestamp is
+added to this file. Different users can share the same file. Setting this
+parameter to an empty string disables command logging.
+
+\fISuggested value\fR: $NETKIT_HOME/netkit_commands.log
+.br
+\fIDefault if no setting\fR: "" (logging disabled)
+
+.TP
+.B
+MCONSOLE_DIR
+This is the name of a directory that stores temporary socket files used to send
+directives to running virtual machines. Each user should set this value to a different
+directory (otherwise, conflicts may occur when different users run virtual
+machines having the same name).
+
+\fISuggested value\fR: $HOME/.netkit/mconsole
+.br
+\fIDefault if no setting\fR: $HOME/.netkit/mconsole
+
+.TP
+.B
+HUB_SOCKET_DIR
+This is the directory in which temporary socket files used by the virtual hubs are placed.
+Different users can share the same directory. Thus, setting this parameter to
+a standard temporary directory like ``/tmp/uml'' is allowed.
+
+\fISuggested value\fR: $HOME/.netkit/hubs
+.br
+\fIDefault if no setting\fR: $HOME/.netkit/hubs
+
+.TP
+.B
+HUB_SOCKET_PREFIX
+Temporary socket files used by the virtual hubs are named according to a standard
+pattern. This parameter allows to configure the prefix that should be used in
+the name of every socket file. This is useful, for example, in order to ease
+recognizing these special files.
+.br
+This parameter must not contain underscores (`\fB_\fR') or commas (`\fB,\fR').
+
+\fISuggested value\fR: vhub
+.br
+\fIDefault if no setting\fR: vhub
+
+.TP
+.B
+HUB_SOCKET_EXTENSION
+Similarly to \fBHUB_SOCKET_PREFIX\fR, it is also possible to configure the standard
+extension to be used for socket file names.
+.br
+This parameter must not contain underscores (`\fB_\fR') or commas (`\fB,\fR'),
+and must always start with a dot (`\fB.\fR').
+
+\fISuggested value\fR: .cnct
+.br
+\fIDefault if no setting\fR: .cnct
+
+.TP
+.B
+HUB_LOG
+Each virtual hub may produce messages reporting error conditions or information
+about its status. All these messages are stored inside a log file whose name
+is the one configured in \fBHUB_LOG\fR. This logging service cannot be disabled;
+hence, empty names are not allowed for this parameter. Different users can
+share the same file.
+
+\fISuggested value\fR: $HUB_SOCKET_DIR/vhubs.log
+.br
+\fIDefault if no setting\fR: $HUB_SOCKET_DIR/vhubs.log
+
+
+.TP
+.B
+USE_SUDO
+This parameter determines how root privileges will be acquired when system-wide
+configurations need to be applied (e.g., a tap interface needs to be set up).
+If set to \fByes\fR, then Netkit will use the \fBsudo\fR(8) command for the
+purpose. By suitably setting up the \fBsudoers\fR(5) file, this can prevent the
+user from having to type the root password every time.
+.br
+If set to \fBno\fR, then Netkit will use the \fIsu\fR command instead, which
+requires inserting the root password for each privileged operation that needs to
+be carried out.
+.br
+For more information about how to set up the \fBsudoers\fR(5) file, see the
+section \fBSETTING UP NETKIT FOR USE WITH SUDO\fR below.
+
+\fISuggested value\fR: yes
+.br
+\fIDefault if no setting\fR: yes
+
+
+
+
+
+.SS
+Default settings for newly started virtual machines
+
+.TP
+.B
+VM_MEMORY
+This is the default amount of available memory inside the virtual machines, in
+MB.
+
+\fIvstart options\fR: \fB\-\-mem\fR, \fB\-M\fR
+.br
+\fISuggested value\fR: 16
+.br
+\fIDefault if no setting\fR: 16
+
+.TP
+.B
+VM_MEMORY_SKEW
+Starting a virtual machine requires allocating a certain amount of memory on the
+host machine. This amount depends on the amount of available memory inside the
+virtual machine (i.e., how much memory you decided to equip the machine with).
+However, some extra memory is needed for kernel structures and other stuff.
+Hence, the actual amount of consumed memory is slightly larger than that of
+available memory inside the emulation. That is, there a skew between consumed
+memory and emulated memory.
+.br
+This parameter allows adjusting the skew so that proper values are returned by
+commands showing memory statistics (e.g., \fIvlist\fR on the host machine \(en
+see \fBvlist\fR(1) \(en and `free -m' inside the virtual machine). The skew
+is expressed in MB units.
+
+\fISuggested value\fR: 4
+.br
+\fIDefault if no setting\fR: 4
+
+.TP
+.B
+VM_MODEL_FS
+This is the name of the default model filesystem. For more information about
+\fImodel filesystem\fRs, see the README in the Netkit filesystem package and
+the man page of \fBvstart\fR(1).
+Remember that COW files must always be used in combination with the same
+model filesystem (i.e., it is not possible to arbitrarily mix COW files and
+model files).
+
+\fIvstart options\fR: \fB\-\-model\-fs\fR, \fB\-m\fR
+.br
+\fISuggested value\fR: $NETKIT_HOME/fs/netkit-fs
+.br
+\fIDefault if no setting\fR: $NETKIT_HOME/fs/netkit-fs
+
+.TP
+.B
+VM_KERNEL
+This is the name of the UML kernel used by virtual machines. Even if there is no
+particular restriction on the kernel to be used, the virtual machine filesystem
+must store system tools which are compatible with the kernel being used. Moreover,
+some filesystems support loading of kernel modules (the one shipped with Netkit
+does). If this is the case, the kernel must have been compiled with support for
+external modules, and modules must be available inside a special directory (see
+the README in the Netkit kernel package for details on how to do this).
+
+\fIvstart options\fR: \fB\-\-kernel\fR, \fB\-k\fR
+.br
+\fISuggested value\fR: $NETKIT_HOME/kernel/netkit-kernel
+.br
+\fIDefault if no setting\fR: $NETKIT_HOME/kernel/netkit-kernel
+
+.TP
+.B
+VM_CON0
+.PD 0
+.TP
+.B
+VM_CON1
+These parameters allow to configure the default device to which the primary
+(\fBVM_CON0\fR) and secondary (\fBVM_CON1\fR) virtual machine consoles should be
+attached. Allowed values for this setting are:
+
+.RS
+.TP
+.B
+none
+Completely disable console (note that disabling both the primary and the
+secondary console makes you unable to reach the virtual machine unless it runs
+some remote shell service or other daemon).
+
+.TP
+.B
+xterm
+Attach console to a terminal emulator application.
+
+.TP
+.B
+this
+Attach console to the current terminal. At most one between the primary and
+secondary console can be configured to use the current terminal.
+
+.TP
+.B
+pty
+Attach console to a pseudo terminal.
+
+.TP
+.B
+port:\fIport\-number\fR
+Attach console to TCP port \fIport\-number\fR. You can later reach it by telnetting
+to this port. Consider that the virtual machine is not actually started until
+you do so. Moreover, disconnecting while the machine is still running and later
+reconnecting is not possible: only a single connection is supported. If you
+happen to accidentally disconnect before halting the virtual machine, you can
+still stop it by using either \fIvhalt\fR or \fIvcrash\fR (see \fBvhalt\fR,
+\fBvcrash\fR).
+
+.PP
+\fIvstart options\fR: \fB\-\-con0\fR, \fB\-\-con1\fR
+.br
+\fISuggested value\fR: xterm (for \fBVM_CON0\fR), none (for \fBVM_CON1\fR)
+.br
+\fIDefault if no setting\fR: xterm (for \fBVM_CON0\fR), none (for \fBVM_CON1\fR)
+.RE
+
+.TP
+.B
+TERM_TYPE
+This parameter determines the terminal emulator application to be used for
+consoles attached to an \fBxterm\fR device. The application must be correctly
+installed in the host system. The following values are allowed.
+
+.RS
+.TP
+.B
+xterm
+Use the standard XTerm.
+
+.TP
+.B
+konsole
+Use the KDE Desktop Environment konsole.
+
+.TP
+.B
+konsole-tabs
+Same as \fBkonsole\fR, but different virtual machine consoles are opened inside
+different tabs of the same konsole window.
+
+.TP
+.B
+gnome
+Use the Gnome Desktop gnome-terminal.
+
+.PP
+\fIvstart options\fR: \fB\-\-xterm\fR
+.br
+\fISuggested value\fR: xterm
+.br
+\fIDefault if no setting\fR: xterm
+.RE
+
+.TP
+.B
+CON0_PORTHELPER
+This parameter should only be used in debugging issues in attaching the
+primary console of virtual machines. When the primary console is attached to a
+terminal emulator, Netkit can attempt to open the emulator in two different
+ways:
+
+.RS
+.IP \(em 3
+by directly starting the virtual machine kernel inside the terminal emulator, or
+.IP \(em 3
+by letting the virtual machine kernel open the terminal emulator on its own.
+.PP
+The second method is deemed as more standard when using User Mode Linux kernels
+(like Netkit's), but is slightly less efficient and more prone to crashes, as
+it relies on a separate software piece (the \fIport-helper\fR) for establishing
+a communication between the kernel and the terminal emulator. The first method
+is more efficient and robust and, for this reason, is currently adopted as
+default choice.
+
+No matter what the value of this parameter is, the secondary terminal will
+always be opened using the second strategy.
+
+\fISuggested value\fR: no
+.br
+\fIDefault if no setting\fR: no
+.RE
+
+.TP
+.B
+MAX_INTERFACES
+This is the maximum number of network interfaces a virtual machine can be
+equipped with. Valid interface numbers will range from 0 to \fBMAX_INTERFACES\fR\-1
+(e.g., if \fBMAX_INTERFACES\fR is 2 only interfaces \fBeth0\fR and \fBeth1\fR can
+be used).
+
+\fISuggested value\fR: 40
+.br
+\fIDefault if no setting\fR: 40
+
+.P
+.B
+MIN_MEM
+.TP
+.B
+MAX_MEM
+These parameters define the minimum and maximum tolerated amount of available
+emulated memory inside virtual machines, in MB. These values can be set so that
+users are prevented from consuming too many resources on the host machine.
+
+\fISuggested value\fR: 8 (for \fBMIN_MEM\fR), 512 (for \fBMAX_MEM\fR)
+.br
+\fIDefault if no setting\fR: 8 (for \fBMIN_MEM\fR), 512 (for \fBMAX_MEM\fR)
+
+
+
+
+.SS
+Default settings for lab commands
+
+.TP
+.B
+MAX_SIMULTANEOUS_VMS
+This is the maximum number of virtual machines that can be simultaneously
+started when using parallel startup. This value must be a positive integer. A
+value of 0 corresponds to setting no limit. For more information about parallel
+startup, see \fBlstart\fR(1).
+
+\fIlstart options\fR: \fB\-p\fR
+.br
+\fISuggested value\fR: 5
+.br
+\fIDefault if no setting\fR: 5
+
+.TP
+.B
+GRACE_TIME
+This value represents the number of seconds to wait for before launching the
+next virtual machine. This parameter is only useful when using \fBlstart\fR(1)
+in fast mode or when using parallel startup. For more information, see
+\fBlstart\fR(1).
+
+\fIlstart options\fR: \fB\-\-wait\fR, \fB\-w\fR
+.br
+\fISuggested value\fR: 0 (for labs with less than 4 machines), more than 5 (for
+labs with more than 4 machines).
+.br
+\fIDefault if no setting\fR: 0
+
+
+\" ########################################
+
+.SH "SETTING UP NETKIT FOR USE WITH SUDO"
+
+From time to time, Netkit requires administrative privileges on the host machine
+to set up particular configurations (e.g., ``\fBtap\fR'' interfaces). Netkit can
+exploit either the \fBsu\fR(1) or the \fBsudo\fR(8) command in order to do this.
+This behaviour can be configured by changing the value of the \fBUSE_SUDO\fR
+parameter. Depending on this choice, Netkit will ask for a different password:
+for the case of \fBsu\fR(1) it is the root password, while for the case of
+\fBsudo\fR(8) it usually is the user's password. In most setups, \fBsudo\fR(8)
+is able to keep user authentication information for a certain amount of time
+during which the password is not requested any longer, even for administrative
+operations. For this reason, by default Netkit uses \fBsudo\fR(8).
+
+By changing the \fBsudoers\fR(5) file it is possible to completely disable the
+password prompt, so that the password is never requested (not even the first
+time) for any administrative operations.
+
+.ce 3
+.B ***************************************************************
+.B ***\ WARNING\ ***\ ***\ WARNING\ ***\ ***\ WARNING\ ***\ ***\ WARNING\ ***
+.B ***************************************************************
+.IP "" 5
+By applying the following configuration you enable the affected user to start a
+shell (therefore any other command) on your host with root privileges, without
+any passwords being asked for. Put in other words, by enabling the following
+setting, a user of your choice is entitled to freely gain root privileges and
+run whichever command she wants without anyone asking her for a password.
+
+This may be an intentional setting on your machine if you frequently perform
+administrative operations, but in the general case
+.ul 2
+please apply this change only if you are aware of the consequences.
+.ft
+.br
+.RE
+
+In order to allow user \fIUSERNAME\fR to gain root privileges without being
+asked for a password, you need to edit the \fI/etc/sudoers\fR file. Since the
+contents of this file are deemed critical for your system security, it is
+recommended to edit the file using \fBvisudo\fR(8), which prevents multiple
+simultaneous edits and applies other sanity checks before applying the changes.
+Of course, other editors may be used as well.
+
+Once you have opened the file, you need to append the following line at the end:
+
+.nf
+\fIUSERNAME\fR ALL = NOPASSWD: /bin/sh
+.fi
+
+where \fIUSERNAME\fR is the name of the affected Netkit user, ALL means that
+this setting will work on all machines (read as: ``no matter what the name of
+the machine you are setting this on is, the setting will work''), NOPASSWD means
+that the following commands can be executed with an arbitrary user ID (including
+root's), and /bin/sh is the name of the command.
+
+
+\" ########################################
+
+.SH "ENVIRONMENT VARIABLES"
+
+Some configuration parameters can be overridden by simply defining an
+environment variable. A list of supported variables follow.
+
+.TP 20
+.B
+NETKIT_FILESYSTEM
+Name of the default model filesystem.
+
+\fICorresponding parameter\fR: \fBVM_MODEL_FS\fR
+
+.TP
+.B
+NETKIT_MEMORY
+Default amount of available memory inside virtual machines.
+
+\fICorresponding parameter\fR: \fBVM_MEMORY\fR
+
+.TP
+.B
+NETKIT_KERNEL
+Name of the UML kernel used by virtual machines
+
+\fICorresponding parameter\fR: \fBVM_KERNEL\fR
+
+.TP
+.B
+NETKIT_CON0
+.PD 0
+.TP
+.B
+NETKIT_CON1
+Device to which the primary and secondary consoles are attached.
+
+\fICorresponding parameter\fR: \fBVM_CON0\fR, \fBVM_CON1\fR
+
+.TP
+.B
+NETKIT_TERM
+Terminal emulator application to be used for consoles in \fBxterm\fR mode.
+
+\fICorresponding parameter\fR: \fBTERM_TYPE\fR
+
+
+\" ########################################
+
+.SH "SAMPLE netkit.conf FILE"
+
+.nf
+#!/bin/false
+# The above line prevents execution of this file
+
+LOGFILENAME="$NETKIT_HOME/netkit_commands.log"
+
+MCONSOLE_DIR="$HOME/.netkit/mconsole"
+HUB_SOCKET_DIR="$HOME/.netkit/hubs"
+
+HUB_SOCKET_PREFIX="vhub"
+HUB_SOCKET_EXTENSION=".cnct"
+HUB_LOG="$HUB_SOCKET_DIR/vhubs.log"
+USE_SUDO=yes
+
+VM_MEMORY=32
+VM_MEMORY_SKEW=4
+VM_MODEL_FS="$NETKIT_HOME/fs/netkit-fs"
+VM_KERNEL="$NETKIT_HOME/kernel/netkit-kernel"
+
+VM_CON0=xterm
+VM_CON1=none
+CON0_PORTHELPER=no
+TERM_TYPE=xterm
+
+MAX_INTERFACES=40
+MIN_MEM=8
+MAX_MEM=512
+
+MAX_SIMULTANEOUS_VMS=5
+GRACE_TIME=0
+.fi
+
+
+\" ########################################
+
+.SH FILES
+
+\fInetkit.conf\fR can be placed in one of the following locations.
+If multiple instances exist, they will be processed in the order in which they
+are listed below (each processed file overrides settings configured by the previous
+one).
+
+.TP
+.I
+/etc/netkit.conf
+This instance of the \fInetkit.conf\fR file can be used to configure system wide
+settings.
+
+.TP
+.I
+$NETKIT_HOME/netkit.conf
+This file may contain settings that are specific for a certain Netkit distribution.
+
+.TP
+.I
+~/.netkit/netkit.conf
+This file contains user specific settings.
+
+
+\" ########################################
+
+.SH "SEE ALSO"
+\fIlstart\fR(1),
+\fInetkit\fR(7),
+Netkit filesystem README,
+Netkit kernel README,
+\fIvstart\fR(1).
+
+
+\" ########################################
+
+.SH AUTHOR
+This man page: Massimo Rimondini

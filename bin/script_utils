@@ -1,0 +1,677 @@
+#!/bin/false
+
+#     Copyright 2002-2009 Maurizio Patrignani, Maurizio Pizzonia, Fabio Ricci,
+#     Massimo Rimondini - Computer Networks Research Group, Roma Tre University.
+#
+#     This file is part of Netkit.
+# 
+#     Netkit is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+# 
+#     Netkit is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+# 
+#     You should have received a copy of the GNU General Public License
+#     along with Netkit.  If not, see <http://www.gnu.org/licenses/>.
+
+# This script contains support definitions, functions and other shell stuff for
+# use within the other Netkit scripts. It is not intended for standalone usage.
+
+# Here we assume that the NETKIT_HOME environment variable has been properly set
+# (other scripts will take care about that).
+
+# Read Netkit configuration
+[ -f /etc/netkit.conf ] && . "/etc/netkit.conf"
+[ -f "$NETKIT_HOME/netkit.conf" ] && . "$NETKIT_HOME/netkit.conf"
+[ -f "$HOME/.netkit/netkit.conf" ] && . "$HOME/.netkit/netkit.conf"
+
+# Assign default values to undefined parameters
+: ${LOGFILENAME:=""}
+: ${MCONSOLE_DIR:="$HOME/.netkit/mconsole"}
+: ${HUB_SOCKET_DIR:="$HOME/.netkit/hubs"}
+: ${HUB_SOCKET_PREFIX:="vhub"}
+: ${HUB_SOCKET_EXTENSION:=".cnct"}
+: ${HUB_LOG:="$HUB_SOCKET_DIR/vhubs.log"}
+: ${VM_MEMORY:=32}
+: ${VM_MEMORY_SKEW:=4}
+: ${VM_MODEL_FS:="$NETKIT_HOME/fs/netkit-fs"}
+: ${VM_KERNEL:="$NETKIT_HOME/kernel/netkit-kernel"}
+: ${VM_CON0:=xterm}
+: ${VM_CON1:=none}
+: ${CON0_PORTHELPER:="no"}
+: ${TERM_TYPE:=xterm}
+: ${MAX_INTERFACES:=40}
+: ${MIN_MEM:=12}
+: ${MAX_MEM:=512}
+: ${MAX_SIMULTANEOUS_VMS:=5}
+: ${GRACE_TIME:=0}
+: ${USE_SUDO:="yes"}
+
+# Check whether some environment variables override default settings
+[ ! -z "$NETKIT_FILESYSTEM" ] && VM_MODEL_FS=$NETKIT_FILESYSTEM
+[ ! -z "$NETKIT_MEMORY" ] && VM_MEMORY=$NETKIT_MEMORY
+[ ! -z "$NETKIT_KERNEL" ] && VM_KERNEL=$NETKIT_KERNEL
+[ ! -z "$NETKIT_CON0" ] && VM_CON0=$NETKIT_CON0
+[ ! -z "$NETKIT_CON1" ] && VM_CON1=$NETKIT_CON1
+[ ! -z "$NETKIT_TERM" ] && TERM_TYPE=$NETKIT_TERM
+
+
+# Use the correct syntax for echo, depending on the shell being used
+if type source > /dev/null 2>&1; then
+	# We are using bash
+	alias echo="echo -e"
+fi
+
+
+# This function implements on-the-fly replacement of substrings on environment
+# variables. Arguments are: the name of the environment variable (the *name*,
+# not its value!), the regular expression to be searched for, and the
+# replacement string.
+varReplace() {
+	local VARIABLE_NAME REGEXP REPLACE_STRING VARIABLE_VALUE
+	VARIABLE_NAME="$1"
+	REGEXP="$2"
+	REPLACE_STRING="$3"
+	eval VARIABLE_VALUE='$'"${VARIABLE_NAME}"
+	echo "${VARIABLE_VALUE}" | awk "{gsub(/${REGEXP}/, \"${REPLACE_STRING}\"); print}"
+}
+
+
+# This function checks whether its argument contains spaces
+checkSpaces() {
+	STRING="$1"
+   if containsRegexp STRING " "; then
+      warning "$SCRIPTNAME" "$CMDLINE" "$0" \
+              "Argument \"$STRING\" contains spaces. They are not allowed."
+      exit 1
+   fi
+}
+
+
+# This function converts a relative path to an absolute path, if needed
+makeAbsolutePath() {
+   ARGUMENT=`echo "$1" | awk '{gsub("^ *",""); print}'`
+   if containsRegexp ARGUMENT '^/' || containsRegexp ARGUMENT '^~' || containsRegexp ARGUMENT '^\$'; then
+      # This is an absolute path
+      eval echo $ARGUMENT
+   else
+      # This is a relative path
+      eval echo "${PWD}/$ARGUMENT"
+   fi
+}
+
+
+# This function searches for a regexp inside a variable value. Arguments are:
+# the name of the environment variable (the *name*, not its value!) and the
+# regular expression to be searched for.
+containsRegexp() {
+	local VARIABLE_NAME VARIABLE_VALUE REGEXP
+	VARIABLE_NAME="$1"
+	REGEXP="$2"
+	eval VARIABLE_VALUE='$'"${VARIABLE_NAME}"
+	echo "$VARIABLE_VALUE" | grep -q "$REGEXP" >/dev/null
+	return $?
+}
+
+
+# This function writes Netkit commands to the command log
+logWrite() {
+   [ -z "$LOGFILENAME" ] && return
+   if [ ! -e "$LOGFILENAME" -o -w "$LOGFILENAME" ]; then
+      echo `date +"%Y/%m/%d %H:%M:%S"` `id -nu` $* >> "$LOGFILENAME"
+   fi
+}
+
+
+# This function prints out some version information
+showVersion() {
+   local NETKIT_VERSION KERNEL_VERSION KERNEL_FILE_NAME NETKIT_KERNEL_VERSION
+   local NETKIT_FILESYSTEM_NAME KERNEL_RELEASE
+   
+   # Netkit version information
+   echo -n "Netkit version:            "
+   NETKIT_VERSION=`cat "$NETKIT_HOME/netkit-version" 2>&1 | grep "Netkit version" `
+   if [ $? = 0 ]; then
+      NETKIT_VERSION="${NETKIT_VERSION##Netkit version }"
+      if echo "$NETKIT_VERSION" | grep -Eq "([0-9]+[\.\-])+[0-9]+[a-zA-Z]*$"; then
+         # This appears to be a valid version number
+         echo "$NETKIT_VERSION"
+      else
+         echo "<unknown>"
+      fi
+   else
+      echo "<unknown>"
+   fi
+   
+   # Netkit kernel version information
+   echo -n "Netkit kernel version:     "
+   KERNEL_FILE_NAME=""
+   [ -f "$VM_KERNEL" ] && KERNEL_FILE_NAME=`basename "$VM_KERNEL"`
+   [ -L "$VM_KERNEL" ] && { KERNEL_FILE_NAME=`readlink "$VM_KERNEL"`;
+                            KERNEL_FILE_NAME=`basename "$KERNEL_FILE_NAME"`; }
+   NETKIT_KERNEL_VERSION="${KERNEL_FILE_NAME##netkit-kernel-}"
+   if echo "$NETKIT_KERNEL_VERSION" | grep -Eq "([0-9]+[\.\-])+[0-9]+(_(rc)?[0-9])?\-K([0-9]+[\.\-])+[0-9]+[a-zA-Z]*$"; then
+      # This appears to be a valid version number
+      KERNEL_RELEASE=`echo $NETKIT_KERNEL_VERSION | cut -d - -f 2`
+      echo "${NETKIT_KERNEL_VERSION##*-} (${KERNEL_RELEASE}) [${NETKIT_KERNEL_VERSION%%-*}]"
+   else
+      echo "<unknown>"
+   fi
+   
+   # Netkit filesystem version information
+   echo -n "Netkit filesystem version: "
+   NETKIT_FILESYSTEM_NAME=""
+   [ -f "$VM_MODEL_FS" ] && NETKIT_FILESYSTEM_NAME=`basename "$VM_MODEL_FS"`
+   [ -L "$VM_MODEL_FS" ] && { NETKIT_FILESYSTEM_NAME=`readlink "$VM_MODEL_FS"`;
+                              NETKIT_FILESYSTEM_NAME=`basename "$NETKIT_FILESYSTEM_NAME"`; }
+   NETKIT_FILESYSTEM_VERSION="${NETKIT_FILESYSTEM_NAME##netkit-fs-}"
+   if echo "$NETKIT_FILESYSTEM_VERSION" | grep -Eq "F([0-9]+[\.\-])+[0-9]+[a-zA-Z]*$"; then
+      # This appears to be a valid version number
+      echo "${NETKIT_FILESYSTEM_VERSION##*-} [${NETKIT_FILESYSTEM_VERSION%%-*}]"
+   else
+      echo "<unknown>"
+   fi
+   
+   # Host kernel version information
+   echo -n "Host kernel version:       "
+   if which uname > /dev/null 2>&1; then
+      uname -r
+   else
+      echo "<unknown>"
+   fi
+}
+
+
+
+# This function can be used to print warnings concerning command line parameters
+warning() {
+   echo 1>&2 "$1: In command line \"$2\""
+   echo 1>&2 "$4"
+   echo 1>&2 "Use $3 --help to get help."
+}
+
+
+# This function creates a directory and sets global permissions for it.
+# If the directory already exists, an error is issued.
+ensureDir() {
+   if [ ! -e "$1" ]; then
+      mkdir "$1"
+      chmod 777 "$1"
+   elif [ ! -d "$1" ]; then
+      echo 1>&2 "File $1 exists: unable to create directory $1. Sorry..."
+      exit 1
+   fi
+}
+
+
+
+
+# Ensure personal Netkit dir exists
+ensureDir $HOME/.netkit
+# Ensure hub socket dir exists
+ensureDir $HUB_SOCKET_DIR
+# Ensure mconsole dir exists
+ensureDir $MCONSOLE_DIR
+
+USERID=`id -un`
+
+
+
+
+
+# This function runs a given command, or, if the first argument is 1, it just
+# prints what would be done. The third argument is the command line that should
+# be actually executed. In case the second argument is not null, it contains the
+# command line that should be shown to user (which may differ from the real
+# executed command line).
+run_command() {
+   if [ -z "$2" ]; then
+      SHOW_COMMAND="$3"
+   else
+      SHOW_COMMAND="$2"
+   fi
+   if [ "x$1" = "x1" ]; then
+      [ -z "$BE_QUIET" ] && echo "Not running ==> $SHOW_COMMAND"
+      # Report that everything went ok
+      return 0
+   else
+      [ -z "$BE_QUIET" ] && echo "Running ==> $SHOW_COMMAND"
+      eval $3
+      return
+   fi
+}
+
+
+# This function returns zero if some process is using the specified file; non-zero
+# otherwise
+someOneUses() {
+   # A non existent file is not used by anybody
+   [ -e "$1" ] || return 1
+   
+   lsof -f -- "$1" > /dev/null 2>&1
+   return
+}
+
+
+# This function starts a special hub that is connected to the Internet, if it
+# does not exist yet (this operation requires administrative privileges).
+# Arguments are: hub name, tap interface IP address, guest interface IP address.
+startInetHub() {
+   local HUB_COMMAND COMPLETE_COMMAND TAP_DEVICE TUNTAP_COMMAND PRESERVE_ENV
+   TAP_DEVICE="nk_tap_$USER"
+   HUB_COMMAND="$NETKIT_HOME/bin/uml_switch -tap $TAP_DEVICE -hub -unix $1 </dev/null 2>&1"
+   COMPLETE_COMMAND="${HUB_COMMAND} | awk -v SWITCHNAME=$1 -v USER=$USERID -v CURRENTDATE=\"`date +\"%Y/%m/%d %H:%M:%S\"`\" \
+               '{printf \"%s %15s %25s %s\n\", CURRENTDATE, USER, SWITCHNAME, \$0}' > ${HUB_LOG} &"
+   if [ ! -S "$1" ] || ! someOneUses "$1"; then
+      # Either socket does not exist yet or it is still unused
+      if [ "$USE_SUDO" = "yes" ]; then
+         # Default sudo configuration resets environment variables for security
+         # reasons (depends on the configuration in sudoers, and may happen even
+         # when using -E)
+         PRESERVE_ENV=$(env | egrep "(^NETKIT)|(^PATH=)")
+         TUNTAP_COMMAND="sudo -p \"$USER's password:\" /bin/sh -c \"eval $PRESERVE_ENV; $NETKIT_HOME/bin/manage_tuntap start $USER $2 $3 $1\""
+      else
+         TUNTAP_COMMAND="su -mc \"$NETKIT_HOME/bin/manage_tuntap start $USER $2 $3 $1\""
+      fi
+      if [ -z "$BE_QUIET" ]; then
+         echo "******** Starting Internet connected virtual hub ********"
+         echo "   $TAP_ADDRESS (host side) - $GUEST_ADDRESS (guest side)"
+         echo "********     (root privileges are required)      ********"
+         run_command "$JUST_PRINT" \
+                     "$NETKIT_HOME/bin/manage_tuntap start $USER $2 $3 $1" \
+                     "$TUNTAP_COMMAND" || \
+            { echo 1>&2 "Error while configuring the tunnel."; exit 1; }
+         echo "************** Abandoning root privileges ***************"
+         echo
+      else
+         run_command "$JUST_PRINT" \
+                     "$NETKIT_HOME/bin/manage_tuntap start $USER $2 $3 $1" \
+                     "$TUNTAP_COMMAND" >/dev/null || \
+            { echo 1>&2 "Error while configuring the tunnel."; exit 1; }
+      fi
+      run_command "$JUST_PRINT" "$HUB_COMMAND" "$COMPLETE_COMMAND"
+   fi
+   
+   # Wait for uml_switch to start
+   while [ -z "$JUST_PRINT" -a ! -S "$1" ]; do
+      sleep 1
+   done
+}
+
+
+# This function starts a hub, if it does not exist yet
+startHub() {
+   local HUB_COMMAND COMPLETE_COMMAND
+   HUB_COMMAND="$NETKIT_HOME/bin/uml_switch -hub -unix $1 </dev/null 2>&1"
+   COMPLETE_COMMAND="${HUB_COMMAND} | awk -v SWITCHNAME=$1 -v USER=$USERID -v CURRENTDATE=\"`date +\"%Y/%m/%d %H:%M:%S\"`\" \
+                '{printf \"%s %15s %25s %s\n\", CURRENTDATE, USER, SWITCHNAME, \$0}' > ${HUB_LOG} &"
+   if [ ! -S "$1" ]; then
+      run_command "$JUST_PRINT" "$HUB_COMMAND" "$COMPLETE_COMMAND"
+   elif ! someOneUses "$1"; then
+      # Socket already exists but is not used
+      run_command "$JUST_PRINT" "$HUB_COMMAND" "$COMPLETE_COMMAND"
+   fi
+   
+   # Wait for uml_switch to start
+   while [ -z "$JUST_PRINT" -a ! -S "$1" ]; do
+      sleep 1
+   done
+}
+
+
+# This function starts all the hubs inside a given list
+runHubs() {
+   local HUB_NAME BASE_HUB_NAME ACTUAL_HUB_NAME TAP_ADDRESS GUEST_ADDRESS
+   while [ $# -gt 0 ]; do
+      HUB_NAME="$1"
+      BASE_HUB_NAME="`varReplace HUB_NAME \".*_\" \"\"`"
+      if [ "${BASE_HUB_NAME#tap${HUB_SOCKET_EXTENSION},}" != "$BASE_HUB_NAME" ]; then
+         # This is an Internet connected hub
+         ACTUAL_HUB_NAME=`echo $1 | awk -v FS="," '{print $1}'`
+         TAP_ADDRESS=`echo $1 | awk -v FS="," '{print $(NF-1)}'`
+         GUEST_ADDRESS=`echo $1 | awk -v FS="," '{print $NF}'`
+         startInetHub "$ACTUAL_HUB_NAME" "$TAP_ADDRESS" "$GUEST_ADDRESS"
+      else
+         # This is a normal hub
+         startHub "$HUB_NAME"
+      fi
+      shift
+   done
+}
+
+
+# This function takes as argument a list of sockets used by virtual hubs, stops
+# those that are not used by any virtual machine and deletes the corresponding
+# sockets.
+cleanHubs() {
+   local FULL_HUB_NAME BASE_HUB_NAME
+   while [ $# -gt 0 ]; do
+      FULL_HUB_NAME=$1
+      BASE_HUB_NAME="`varReplace FULL_HUB_NAME \".*_\" \"\"`"
+      if [ "${BASE_HUB_NAME#tap${HUB_SOCKET_EXTENSION},}" != "$BASE_HUB_NAME" ]; then
+         # This is an Internet connected hub
+         FULL_HUB_NAME=`echo $FULL_HUB_NAME | awk -v FS="," '{print $1}'`
+      fi
+      
+      # Avoid attempting to kill hubs for which the socket file does not exist
+      # any more. Such situation may occur if user accidentally deleted it
+      # (in which case the hub can safely be killed by using vclean), or if
+      # a virtual machine has two (or more) network interfaces attached to the
+      # same hub (in which case the script attempts to kill it twice).
+      if [ ! -e "$FULL_HUB_NAME" ]; then
+         shift
+         continue
+      fi
+      
+      if someOneUses $FULL_HUB_NAME; then
+         SWITCH_PROCESS=`ps -wwwwwweo pid,command --sort=pid | grep "uml_switch.*$FULL_HUB_NAME" | grep -v "grep uml_switch" | awk '{print $1}' | head -n 1`
+         if [ `lsof -p $SWITCH_PROCESS 2>/dev/null | grep -c $FULL_HUB_NAME` -le 1 ]; then
+            # No more virtual machines are using the switch connected to this socket
+            kill $SWITCH_PROCESS > /dev/null 2>&1 && rm -f $FULL_HUB_NAME
+         fi
+      else
+         # There are no switches connected to this socket: just remove it
+         rm -f $FULL_HUB_NAME
+      fi
+      shift
+   done
+}
+
+
+
+# This function just outputs a process list in a format that is suitable for
+# processing by the following functions.
+psList() {
+   ps -wwwwwweo uname=ENSURE_USER_NAME_COLUMN_IS_VERY_WIDE,pid,vsize,command --sort=pid
+}
+
+
+# This function takes as argument a user name (if none, all users will be
+# spanned) and a virtual machine name. If a virtual machine with that name
+# exists, it populates some environemnt variables with a description of the
+# machine status. If the machine is found to exist, returned value is 0.
+# Otherwise, 1 is returned.
+getVMinfoByName() {
+   VM_PS_ENTRY=`psList | grep -w "^$1 .*umid=$2" | grep -v "grep -w" | head -n 1`
+   if [ -z "$VM_PS_ENTRY" ]; then
+      # Virtual machine does not exist
+      return 1
+   fi
+   getVMinfo "$VM_PS_ENTRY"
+   return 0   
+}
+
+
+# This function takes as argument a PID and, if a virtual machine with that
+# PID exists, it populates some environemnt variables with a description of
+# the machine status. If the machine is found to exist, returned value is 0.
+# Otherwise, 1 is returned.
+getVMinfoByPID() {
+   VM_PS_ENTRY=`psList | awk -v pid=$1 \
+      '
+         BEGIN {
+            vm_process = 0
+         }
+         
+         (match($0," umid=[^ ]+")) {
+            vm_id = substr($0,RSTART,RLENGTH)
+            if (machines[vm_id] != 1) vm_process = $2
+            else vm_process = 0
+            machines[vm_id] = 1
+         }
+         (vm_process==pid) {print}
+      ' | head -n 1`
+   if [ -z "$VM_PS_ENTRY" ]; then
+      # Virtual machine does not exist
+      return 1
+   fi
+   getVMinfo "$VM_PS_ENTRY"
+   return 0   
+}
+
+
+# This function, given a virtual machine 'ps'-like process line, extracts
+# information about the machine. 
+getVMinfo() {
+   local ASSIGN_VARS
+   unset VMINFO_KERNEL VMINFO_ETH_INTERFACES VMINFO_MEM VMINFO_FS VMINFO_SHAREDFS
+   unset VMINFO_CON0 VMINFO_CON1 VMINFO_EXEC VMINFO_HOSTLAB VMINFO_HOSTWD
+   unset VMINFO_APPENDED VMINFO_USER VMINFO_PID VMINFO_SIZE
+   unset VMINFO_NAME VMINFO_TERMTITLE VMINFO_HOSTHOME VMINFO_MCONSOLE VMINFO_KERNEL_MODULES
+   
+   ASSIGN_VARS=`echo "$1" | awk -v FS="=" -v RS=" +" -v memory_skew=$VM_MEMORY_SKEW \
+      '
+         BEGIN {
+            vminfo_eth_interfaces = ""
+            vminfo_appended = ""
+            PARSE_OPTIONS=0
+         }
+         
+         {
+            if ($0 == "") {
+               getline
+               NR--
+            }
+            NOT_AN_OPTION=1
+         }
+         (NR==1) {
+            print "VMINFO_USER=" $0
+         }
+         (NR==2) {
+            print "VMINFO_PID=" $0
+         }
+         (NR==3) {
+            print "VMINFO_SIZE=" $0
+         }
+         (NR==4) {
+            print "VMINFO_KERNEL=" $0
+         }
+         (match($1,"^eth") != 0) {
+            gsub("daemon,,,", "", $2)
+            vminfo_eth_interfaces = (vminfo_eth_interfaces == "" ? "" : vminfo_eth_interfaces " ") $1 "=" $2
+            NOT_AN_OPTION=0
+         }
+         ($1=="name") {
+            # This is the first argument of the kernel command line
+            PARSE_OPTIONS=1
+         }
+         ($1=="mem") {
+            gsub("M", "", $2)
+            print "VMINFO_MEM=" ($2 - memory_skew)
+            NOT_AN_OPTION=0
+         }
+         ($1=="ubd0") {
+            fs_count = split($2, fs, ",")
+            print "VMINFO_FS=" fs[1]
+            if (fs_count > 1)
+               print "VMINFO_SHAREDFS=" fs[2]
+            else
+               print "VMINFO_SHAREDFS=" fs[1]
+            NOT_AN_OPTION=0
+         }
+         ($1=="con0") {
+            if (match($2,"xterm")) print "VMINFO_CON0=XTERM"
+            else if (match($2,"fd:0,fd:1")) print "VMINFO_CON0=THIS"
+            else if (match($2,"pty")) print "VMINFO_CON0=PTY"
+            else if (match($2,"^port:")) print "VMINFO_CON0=" toupper($2)
+            #else if (match($2,"null")) print "VMINFO_CON0=NONE"
+            NOT_AN_OPTION=0
+         }
+         ($1=="con1") {
+            if (match($2,"xterm")) print "VMINFO_CON1=XTERM"
+            else if (match($2,"fd:0,fd:1")) print "VMINFO_CON1=THIS"
+            else if (match($2,"pty")) print "VMINFO_CON1=PTY"
+            else if (match($2,"^port:")) print "VMINFO_CON1=" toupper($2)
+            else if (match($2,"null")) print "VMINFO_CON1=NONE"
+            NOT_AN_OPTION=0
+         }
+         ($1=="exec") {
+            print "VMINFO_EXEC=" $2
+            NOT_AN_OPTION=0
+         }
+         ($1=="hostlab") {
+            print "VMINFO_HOSTLAB=" $2
+            NOT_AN_OPTION=0
+         }
+         ($1=="hostwd") {
+            print "VMINFO_HOSTWD=" $2
+            NOT_AN_OPTION=0
+         }
+         ($1=="name") {
+            print "VMINFO_NAME=" $2
+            NOT_AN_OPTION=0
+         }
+         ($1=="title") {
+            print "VMINFO_TERMTITLE=" $2
+            NOT_AN_OPTION=0
+         }
+         ($1=="hosthome") {
+            print "VMINFO_HOSTHOME=" $2
+            NOT_AN_OPTION=0
+         }
+         ($1=="modules") {
+            print "VMINFO_KERNEL_MODULES=" $2
+            NOT_AN_OPTION=0
+         }
+         (NOT_AN_OPTION==1 && PARSE_OPTIONS==1) {
+            vminfo_appended = (vminfo_appended == "" ? "" : vminfo_appended " ") $0
+         }
+         
+         END {
+            print "VMINFO_APPENDED=\"" vminfo_appended "\""
+            print "VMINFO_ETH_INTERFACES=\"" vminfo_eth_interfaces "\""
+         }
+      '`
+   eval "$ASSIGN_VARS"
+   
+   # Mconsole handle
+   VMINFO_MCONSOLE=$MCONSOLE_DIR/$VMINFO_NAME/mconsole
+}
+
+
+# This function, given a user name and a virtual machine name, returns a list of
+# PIDs of processes that are related to that machine. If the user name is
+# not null, then only machines for that user are taken into account. Otherwise,
+# PIDs for the first virtual machine with a matching name are reported. If there
+# is no virtual machine with this name (for the given user), a null result is
+# reported.
+getVMPIDsByName() {
+   psList | awk -v username=$1 -v vm_name=$2 \
+      '
+         BEGIN {
+            # A user is said to be valid if it either matches the username
+            # passed as argument or it is the first user for which a matching
+            # virtual machine has been found (this prevents considering
+            # different virtual machines having the same name but owned by
+            # different users).
+            valid_user=""
+         }
+         (match($0,"^" username " .* umid=" vm_name " ")) {
+            if (!match($0,"awk") && (valid_user=="" || valid_user==$1)) {
+               print $2
+               valid_user=$1
+            }
+         }
+         (match($0,"xterm.*(" vm_name ").*-uml-socket") && $1==valid_user) {
+            vm_xterm_socket=$NF
+         }
+         (match($0,"port-helper") && $NF==vm_xterm_socket) {
+            if (!match($0,"xterm ")) print $2
+         }
+      '         
+}
+
+
+# This function, given a virtual machine PID, returns a list of PIDs of processes
+# that are related to that machine. If no virtual machine with that PID exists, a
+# null result is reported.
+getVMPIDsByPID() {
+   psList | awk -v pid=$1 \
+      '
+         BEGIN {
+            # A user is said to be valid if it is the same user as the
+            # one that owns the virtual machine whose PID has been passed
+            # as argument (this prevents considering different virtual
+            # machines having the same name but owned by different users).
+            valid_user=""
+         }
+         (match($0,"umid=[^ ]+") && pid==$2 && (valid_user=="" || valid_user==$1)) {
+            vm_name = substr($0,RSTART+5,RLENGTH-5)
+            valid_user=$1
+         }
+         (vm_name != "" && match($0,"^" valid_user " .* umid=" vm_name " ")) {
+            if (!match($0,"awk"))
+               print $2
+         }
+         (vm_name != "" && match($0,"xterm.*(" vm_name ").*-uml-socket") && $1==valid_user) {
+            vm_xterm_socket=$NF
+         }
+         (match($0,"port-helper") && $NF==vm_xterm_socket) {
+            if (!match($0,"xterm ")) print $2
+         }
+      '
+}
+
+
+
+# This function prints a list of running virtual machines. It takes as argument
+# the name (NOT the uid) of a user whose virtual machines to display. If a null
+# argument is passed, machines for all users are displayed instead.
+showVMList() {
+   ps -wwwwwweo uname=ENSURE_USER_NAME_COLUMN_IS_VERY_WIDE,pid,vsize,command --sort=pid | grep "^.*umid=" | grep -v "awk -v no_header" | grep -v "grep \^\.\*" | \
+      awk \
+         -v no_header="$1" \
+         -v hub_socket_prefix=$HUB_SOCKET_PREFIX \
+         -v userid=$USERID \
+         -v hub_socket_extension=$HUB_SOCKET_EXTENSION \
+         -v user_filter="$2" \
+      '
+         BEGIN {
+            if (no_header == "")
+               print "USER             VHOST               PID       SIZE  INTERFACES"
+            user_mem=0
+            tot_mem=0
+         }
+         {
+            match($0,"umid=[^ ]*")
+            current_machine = substr($0,RSTART+5,RLENGTH-5)
+            current_user = $1
+            if (machines[current_user,current_machine]!=1) {
+               tot_mem += $3
+               tot_machines++
+               if (userid == current_user) {
+                  user_mem += $3
+                  user_machines++
+               }
+               if (user_filter == "" || user_filter == current_user) {
+                  printf "%-15s  %-15s  %6i  %9i  ",
+                     $1, current_machine, $2, $3
+                  firstentry=1
+                  for (i=4; i<=NF; i++) {
+                     if (match($i,"^eth[0-9]+") > 0) {
+                        device = substr($i, RSTART, RLENGTH)
+                        match($i, ".*/" hub_socket_prefix "_[^_]+_[^_]+" hub_socket_extension)
+                        hub_param_count = split(substr($i,RSTART,RLENGTH), hub_parameters, "[_.]")
+                        hub = hub_parameters[hub_param_count-1]
+                        if (firstentry!=1) printf ", "
+                        printf "%s @ %s", device, hub
+                        firstentry=0
+                     }
+                  }
+                  printf "\n"
+               }
+            }
+            machines[current_user,current_machine]=1
+         }
+         END {
+            if (no_header == "") {
+               printf "\nTotal virtual machines: %7i    (you),  %7i    (all users).\n", user_machines, tot_machines
+               printf "Total consumed memory: %8i KB (you), %8i KB (all users).\n", user_mem, tot_mem
+            }
+         }
+      '
+}

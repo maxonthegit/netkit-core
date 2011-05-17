@@ -1,0 +1,146 @@
+.TH LCRASH 1 "November 2009" "" Netkit
+.SH NAME
+lcrash \- crash machines of a netkit lab
+.SH SYNOPSIS
+\fBlcrash\fR [options] [\fIMACHINE\-NAME\fR...]
+
+.SH DESCRIPTION
+The \fIlcrash\fR command can be used to forcedly shutdown all the virtual machines
+of a Netkit lab. This roughly corresponds to suddenly unplugging them from the power
+socket. \fIlcrash\fR uses the \fBvcrash\fR command to stop virtual machines
+(see \fBvcrash\fR(1)).
+
+If a list of \fIMACHINE\-NAME\fRs is provided, only virtual machines with a
+matching name \fIand\fR that are part of the lab will be crashed. Otherwise, all the
+machines of the lab are crashed.
+
+The following options are supported by \fIlcrash\fR:
+.TP
+.B
+\-d \fIDIRECTORY\fR
+Crash the Netkit lab that is located inside \fIDIRECTORY\fR. If no \fB\-d\fR
+option is provided, \fIlcrash\fR assumes that the lab is located in the
+current directory. The path to the lab directory (being that the current
+directory or one provided by \fB\-d\fR) must never contain spaces.
+
+.TP
+.B
+\-F
+.PD 0
+.TP
+.B
+\-\-keep-fs
+This option prevents \fIlcrash\fR from deleting virtual machines (COW)
+filesystems (.disk files). By default, \fIlcrash\fR removes the filesystem after
+crashing each virtual machine in order to ensure that virtual machines revert to
+their original state when the lab is restarted.
+
+Notice that the model filesystem is never removed, regardless of the use of
+this option.
+See the README file in the Netkit filesystem package for information about COW
+and model filesystems.
+
+.TP
+.B
+\-k
+.PD 0
+.TP
+.B
+\-\-kill
+There are two different ways of crashing a virtual machine. The first one is
+to send a special message that tells it to immediately shut down. This is also
+called the mconsole method. The second one is to simply kill running processes
+that correspond to the virtual machine.
+.br
+The mconsole method is usually faster, but may be ineffective if a virtual
+machine has somewhy frozen (in which case it is unable to receive messages). If
+it happens to fail, the other method (killing processes) is automatically tried.
+However, killing processes is considered a last resort.
+.br
+If the mconsole method fails too often, this option can be used to force
+\fIlcrash\fR to always kill processes. In general, there should be no need to
+use it.
+
+.TP
+.B
+\-l
+.PD 0
+.TP
+.B
+\-\-list
+Show a list of currently running virtual machines after the lab has been
+crashed. This is useful to check whether all the hosts have been shut down.
+
+.TP
+.B
+\-q
+.PD 0
+.TP
+.B
+\-\-quick
+.PD 0
+.TP
+.B
+\-\-quiet
+Do not check whether virtual machines have actually crashed. This results in a
+faster lab shutdown, but some hanging processes may be left behind. If this
+happens, try crashing the lab again without using this option or use \fBvclean\fR
+(see \fBvclean\fR(1)). This option also slightly reduces output information.
+
+.PP
+The following standard options are also supported.
+
+.TP
+.B
+\-h
+.PD 0
+.TP
+.B
+\-\-help
+Show usage information.
+
+.TP
+.B
+\-\-version
+Print information about the installed Netkit release and the host kernel version
+and exit. If ``\fI<unavailable>\fR'' is printed instead of a version number,
+then the corresponding information could not be retrieved (for example because
+a non-standard Netkit kernel or filesystem is being used).
+
+
+\" ########################################
+
+.SH "ENVIRONMENT VARIABLES"
+
+All Netkit commands require that the \fBNETKIT_HOME\fR variable contains the
+name of the directory Netkit is installed in.
+
+Apart from this, \fIlcrash\fR supports no other environment variables.
+
+
+\" ########################################
+
+.SH "SEE ALSO"
+\fIlstart\fR(1),
+\fIlclean\fR(1),
+\fIlhalt\fR(1),
+\fIlrestart\fR(1),
+\fIlinfo\fR(1),
+\fIltest\fR(1),
+\fIvclean\fR(1),
+\fIvcrash\fR(1),
+Netkit filesystem README.
+    
+
+\" ########################################
+
+.SH AUTHOR
+
+\fIlcrash\fR script: Stefano Pettini, Massimo Rimondini
+.br
+This man page: Fabio Ricci, Massimo Rimondini
+
+
+\" ########################################
+
+.so include/bugreport.man

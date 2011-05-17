@@ -1,0 +1,127 @@
+.TH VHALT 1 "July 2010" "" "Netkit"
+.SH NAME
+vhalt \- shutdown a running netkit virtual machine
+.SH SYNOPSIS
+\fBvhalt\fR [options] \fIMACHINE-ID\fR...
+
+
+\" ########################################
+
+.SH DESCRIPTION
+
+The \fIvhalt\fR command can be used to gracefully shutdown running virtual machines.
+Using \fIvhalt\fR has exactly the same effect as issuing the `halt' command
+inside the virtual machine.
+
+\fIMACHINE\-ID\fR is either the name or the PID of a virtual machine.
+
+This command supports the following options.
+
+.TP
+.B
+-q
+.PD 0
+.TP
+.B
+--quick
+.PD 0
+.TP
+.B
+--quiet
+The default behaviour is to wait a few seconds in order to check whether the virtual
+machine has actually shut down. By using this option, \fIvhalt\fR issues the shutdown
+command and exits immediately, without waiting for termination of the virtual machine.
+This option also suppresses any output, except errors and warnings.
+
+This is useful, for example, to embed invocations of \fIvhalt\fR inside scripts.
+
+.TP
+.B
+-r
+.PD 0
+.TP
+.B
+--remove-fs
+Delete virtual machine (COW) filesystem after halting machine. This option does not
+affect in any way the model filesystem. In particular, using this option has no
+effect on machines started with the \fB\-\-no\-cow\fR or \fB\-W\fR option. See
+the README in the Netkit filesystem package for more information about COW and
+model filesystems.
+
+.TP
+.B
+-u \fIUSERNAME\fR
+.PD 0
+.TP
+.B
+--user=\fIUSERNAME\fR
+Restrict the \fIvhalt\fR range of action to virtual machines owned by \fIUSERNAME\fR.
+By using this option, only machines started by \fIUSERNAME\fR can be halted. This
+option is useful, for example, if you want to halt someone else's machines (this
+requires administrative privileges). By default \fIvhalt\fR only considers
+virtual machines owned by the current user (the one who launched the \fIvhalt\fR
+command). The special \fIUSERNAME\fR `\fB-\fR' is
+reserved and can be used to kill virtual machines regardless of their owner.
+
+Special care must be taken if you choose to pass virtual machine names to \fIvhalt\fR
+and the `\fB\-\-user\fR=\fB-\fR' option is being used. If two (or more)
+different users are running virtual machines having the same \fIname\fR, then only the
+one returned by
+.nh
+`vlist --user=- \fIname\fR'
+.hy
+is halted.
+
+.PP
+Other available options are:
+
+.TP
+.B
+-h
+.PD 0
+.TP
+.B
+--help
+Show usage information.
+
+.TP
+.B
+--version
+Print information about the installed Netkit release and the host kernel version
+and exit. If ``\fI<unavailable>\fR'' is printed instead of a version number,
+then the corresponding information could not be retrieved (for example because
+a non-standard Netkit kernel or filesystem is being used).
+
+
+\" ########################################
+
+.SH "ENVIRONMENT VARIABLES"
+
+All Netkit commands require that the \fBNETKIT_HOME\fR variable contains the
+name of the directory Netkit is installed in.
+
+Apart from this, \fIvhalt\fR supports no other environment variables.
+
+
+\" ########################################
+
+.SH "SEE ALSO"
+\fIvclean\fR(1),
+\fIvconfig\fR(1),
+\fIvcrash\fR(1),
+\fIvlist\fR(1),
+\fIvstart\fR(1),
+Netkit filesystem README.
+
+
+\" ########################################
+
+.SH AUTHOR
+\fIvhalt\fR script: Massimo Rimondini
+.br
+This man page: Massimo Rimondini, Fabio Ricci
+
+
+\" ########################################
+
+.so include/bugreport.man

@@ -1,0 +1,366 @@
+.TH LAB.CONF 5 "July 2010" "" Netkit
+.SH NAME
+lab.conf \- configuration of a Netkit lab
+.P
+lab.dep \- dependencies on the startup order of virtual machines in a lab
+
+
+\" ########################################
+
+.SH DESCRIPTION
+This page describes the files involved in the setup of a Netkit lab and
+illustrates the basic procedure to set up your own virtual network with Netkit.
+
+
+\" ########################################
+
+.SH "CONFIGURING A NETKIT LAB"
+
+A Netkit lab is essentially a directory containing some special files and
+subdirectories. Each subdirectory represents a virtual machine to be started,
+which will be named the same way as the subdirectory itself. Unless differently
+specified, simply the existence of a subdirectory causes a virtual machine to be
+started, even if the subdirectory is empty. Because of virtual machine naming
+conventions, subdirectories must not contain spaces in their names.
+
+The lab directory may contain files and subdirectories having a special meaning.
+In the following, \fIlab\-path\fR is assumed to be the directory where the lab
+is located.
+
+.TP
+.I
+\fIlab\-path\fR/lab.conf
+This is the main lab configuration file. In this file you can specify the names of
+virtual machines to be started, any option that should be used when launching them,
+and the topology of the network that connects them. Optionally, you
+can also provide some descriptive
+information for the lab, which will be displayed upon its startup. This file
+is not explicitly required, but running a lab without a \fIlab.conf\fR file is kind
+of useless...
+
+This file is a list of \fImachine\fR[\fIarg\fR]=\fIvalue\fR assignments, where
+\fIarg\fR can be an integer value or the name of a \fBvstart\fR option (see
+\fBvstart\fR(1)).
+
+.RS
+.IP \(en 2
+If \fIarg\fR is an
+integer value, then \fIvalue\fR is the name of the collision domain to which
+interface \fBeth\fIarg\fR of machine \fImachine\fR must be connected (note that
+the name of the collision domain must not contain spaces (` '), underscores (`\fB_\fR'),
+commas (`\fB,\fR'), and dots (`\fB.\fR'), unless it is a ``\fBtap\fR'' collision
+domain - see \fBvstart\fR(1) for more information). For example, ``pc1[0]=CD1'' means that
+interface \fBeth0\fR of virtual machine \fBpc1\fR will be connected to collision
+domain \fBCD1\fR.
+.br
+The range of permitted network interfaces is configured inside the file
+\fInetkit.conf\fR (see \fBnetkit.conf\fR(5))
+.br
+The special collision domain name ``\fBtap\fR'' is reserved, and can be used to
+connect a network interface to an external network (e.g., the Internet). See
+\fBvstart\fR(1) for more information about ``\fBtap\fR'' collision domains.
+
+.IP \(en 2
+If \fIarg\fR is an option name, then \fImachine\fR will be launched with option
+\fIarg\fR set to value \fIvalue\fR. \fIarg\fR can be the name of any \fBvstart\fR
+option, being it short (e.g., \fB\-L\fR) or long (e.g., \fB\-\-mem\fR), without
+the leading dashes (`\fB\-\fR'). If the option requires an argument, it can be
+passed by providing a \fIvalue\fR. For those options that do not require an
+argument (e.g., \fB\-H\fR), \fIvalue\fR must be omitted.
+.br
+For example, ``pc1[mem]=64'' specifies that virtual machine \fBpc1\fR will be
+equipped with 64 MB of emulated memory, and ``pc1[D]='' tells \fBvstart\fR to hide
+the .disk file for virtual machine \fBpc1\fR.
+
+.PP
+
+The special assignment ``machines=\fImachine\-list\fR'' can be used to explicitly
+define the set of virtual machines that are part of the lab. This also allows to start
+a virtual machine even if the corresponding subdirectory does not exist.
+\fImachine\-list\fR is a space separated list of virtual machine names.
+
+
+It is also possible to provide descriptive information about a lab by using
+one of the following special assignments:
+
+.IP \(en 2
+LAB_DESCRIPTION=\fIstring\fR (a brief description of the purpose of the lab)
+.IP \(en 2
+LAB_VERSION=\fIstring\fR (the version of the lab)
+.IP \(en 2
+LAB_AUTHOR=\fIstring\fR (people who have prepared the lab)
+.IP \(en 2
+LAB_EMAIL=\fIstring\fR (contacts of lab authors)
+.IP \(en 2
+LAB_WEB=\fIstring\fR (useful web reources related to the lab)
+.PP
+
+A line that does not match the above syntax is supposed to be a comment and is
+ignored by \fIlstart\fR. However, in order to establish a uniform convention,
+comment lines should always start with a hash character (`\fB#\fR').
+.RE
+
+.TP
+.I
+\fIlab\-path\fR/lab.dep
+If such a file exists in the lab directory, then parallel startup (see \fBlstart\fR(1))
+for that lab
+is automatically enabled, even if option \fB\-p\fR is not used.
+Parallel startup allows to launch several virtual
+machines at once while still obeying some startup order rules. The file \fIlab.dep\fR
+contains dependency rules which tell \fIlstart\fR the order in which virtual
+machines should be started.
+
+\fBNotice\fR: in order to be able to use parallel startup, the \fBmake\fR
+utility must be properly installed.
+
+If you are familiar with Makefiles, \fIlab.dep\fR is simply a list of rules, where
+both targets and prerequisites are names of virtual machines.
+.br
+In particular, a rule inside \fIlab.dep\fR has the following syntax:
+
+.nf
+   MACHINE: MACHINE1 MACHINE2 ...
+.fi
+
+where MACHINE, MACHINE1, MACHINE2, ... are names of virtual machines. The rule
+states that MACHINE can only be started after MACHINE1, MACHINE2, ... have
+completed their boot. Notice that, it they are not dependent on each other, two
+(or more) virtual machines can also be started simultaneously. The maximum number
+of virtual machines that can be started simultaneously can be set by using the
+\fB\-p\fR option of \fIlstart\fR or by configuring the value MAX_SIMULTANEOUS_VMS
+inside \fInetkit.conf\fR (see \fBnetkit.conf\fR(5)).
+
+Lines starting with a hash character (`\fB#\fR') are assumed to be comments and
+simply ignored.
+
+.TP
+.I
+\fIlab\-path\fR/\fImachine\fR/
+Each subdirectory inside \fIlab\-path\fR represents a virtual machine to be
+started, whose name will be the same as the one of the subdirectory.
+
+Optionally, this subdirectory may contain files that you wish to make available
+(i.e., copy) inside the virtual machine filesystem. You can also put a full hierarchy of
+directories here. When organizing files inside \fIlab\-path\fR/\fImachine\fR/,
+think of it as if it were the root (`\fB/\fR') directory of the virtual machine.
+For example, a file `\fIlab\-path\fR/\fImachine\fR/foo' will be copied into
+`/foo' inside virtual machine \fImachine\fR.
+
+In case of conflicts, files inside this subdirectory overwrite those
+inside \fIlab\-path\fR/shared/.
+
+.TP 
+.I
+\fIlab\-path\fR/\fImachine\fR.startup
+This file is a shell script that will be launched during the startup of
+virtual machine \fImachine\fR after all the other initialization scripts have
+been executed. This file may be useful, for example, to automatically setup
+IP addresses for network interfaces. It is not required to assign this script
+the executable permission.
+.br
+Note that this script is always executed by using \fB/bin/sh\fR as interpreter.
+If you would like to run a boot-time script using a different interpreter, just
+invoke it inside \fI\fImachine\fR.startup\fR.
+
+.TP
+.I
+\fIlab\-path\fR/\fImachine\fR.shutdown
+This file is a shell script that will be executed when virtual machine
+\fImachine\fR is either halted (not crashed) or rebooted. It is not required to
+assign this script the executable permission.
+.br
+Note that this script is always executed by using \fB/bin/sh\fR as interpreter.
+If you would like to run a halt-time script using a different interpreter, just
+invoke it inside \fI\fImachine\fR.shutdown\fR.
+
+.TP
+.I
+\fIlab\-path\fR/shared/ 
+This subdirectory may contain files and directories that you want to make available (i.e., copy)
+inside every virtual machine filesystem. Files should be organized so that
+\fIlab\-path\fR/shared/ corresponds to the root (`\fB/\fR') directory of the
+virtual machines.
+
+In case of conflicts, files inside this subdirectory are overwritten by those
+inside \fIlab\-path\fR/\fImachine\fR/.
+
+.TP
+.I
+\fIlab\-path\fR/shared.startup
+This is a shell script that will be run on every virtual machine just
+before \fIlab\-path\fR/\fImachine\fR.startup\fR. It is not required to assign
+this script the executable permission.
+.br
+Note that this script is always executed by using \fB/bin/sh\fR as interpreter.
+If you would like to run a boot-time script using a different interpreter, just
+invoke it inside \fIshared.startup\fR.
+
+.TP
+.I
+\fIlab\-path\fR/shared.shutdown
+This is a shell script that will be run on every virtual machine just
+after \fIlab\-path\fR/\fImachine\fR.shutdown\fR. It is not required to assign
+this script the executable permission.
+.br
+Note that this script is always executed by using \fB/bin/sh\fR as interpreter.
+If you would like to run a halt-time script using a different interpreter, just
+invoke it inside \fIshared.shutdown\fR.
+
+.TP
+.I
+\fIlab\-path\fR/_test/
+This subdirectory contains information for performing a test of the lab. It may
+be automatically created by \fBltest\fR or may contain user created files
+describing customized tests. For more information about this directory,
+see \fBltest\fR(1).
+
+
+\" ########################################
+
+.SH "HOW TO INFLUENCE THE STARTUP ORDER OF VIRTUAL MACHINES"
+
+Virtual machines are usually launched in arbitrary order. However, there are
+several ways of influencing the order in which they are started up.
+
+.IP \(en 2
+The first way is to insert a ``machines=\fImachine\-list\fR'' assignment
+inside \fIlab.conf\fR. If such an assignment exists, \fIlstart\fR launches
+virtual machines in the same order in which they appear in the \fImachine\-list\fR.
+
+.IP \(en 2
+Another possibility is to provide a list of \fIMACHINE\-NAME\fRs as argument to
+\fIlstart\fR. This ensures that virtual machines are started in the same order
+in which they are listed on the \fIlstart\fR command line. This method overrides
+ordering information obtained from \fIlab.conf\fR.
+
+.IP \(en 2
+It is also possible to use a \fIlab.dep\fR file. This would have the twofold
+benefit of allowing multiple virtual machines to start up simultaneously while
+still preserving a partial ordering among them. This method overrides ordering
+information passed by command line arguments.
+
+
+\" ########################################
+
+.SH EXAMPLES
+
+The following one is a simple example of a Netkit lab, stored inside the
+directory `/home/foo/lab'.
+
+The directory contents are the following:
+
+.RS 3
+.nf
+lab/
+|
++- lab.conf
++- lab.dep
++- pc1/
++- pc2/
++- pc3/
+\\- router/
+   |
+   \\- etc/
+      |
+      \\- zebra/
+         |
+         \\- bgpd.conf
+.fi
+.RE
+
+The file lab.conf is made up as follows:
+
+.RS 3
+.nf
+machines="pc1 pc2 router"
+pc1[0]=CD1
+pc2[0]=CD2
+router[0]=CD1
+router[1]=CD2
+pc1[mem]=64
+router[mem]=128
+.fi
+.RE
+
+The file lab.dep is made up as follows:
+
+.RS 3
+.nf
+pc2: router pc1
+.fi
+.RE
+
+This lab implements the following network topology, where \fBCD1\fR and \fBCD2\fR
+are collision domains:
+
+.RS 3
+.nf
+   eth0   eth0    eth1   eth0
++---+       +------+       +---+
+|pc1+-------+router+-------+pc2|
++---+  CD1  +------+  CD2  +---+
+64 MB        128 MB
+.fi
+.RE
+
+The lab is extremely simple: there are no automatically configured network
+interfaces or services. There is only a simple configuration file for the BGP
+routing daemon (bgpd) that is automatically deployed inside virtual machine
+\fBrouter\fR under `/etc/zebra/bgpd.conf'.
+
+Assuming the current directory is `/home/foo', it is now possible to launch the
+lab by issuing the command:
+
+.RS 3
+.nf
+lstart -d lab/
+.fi
+.RE
+
+Since a lab.dep file has been created, this lab supports parallel startup.
+Because of the contents of the lab.dep file, \fBrouter\fR and \fBpc1\fR will be
+started simultaneously, while \fBpc2\fR will only be launched after they have
+completed their boot phase.
+
+Notice that, even if there exists a subdirectory `/home/foo/lab/pc3/', the
+corresponding machine is not actually started. This happens because lab.conf
+contains an entry (the `machines=' assignment) stating that \fBpc3\fR does
+not belong to the lab.
+
+
+\" ########################################
+
+.SH NOTES
+
+A Netkit lab is essentially a set of configuration files. Virtual machines
+filesystems (.disk files) do not provide additional data or information (except
+in very particular situations). Hence, when a Netkit lab is prepared for
+redistribution, make sure that virtual machines filesystems (.disk files) have
+been removed before creating the package. To this purpose, you can use the
+\fBlclean\fR(1) tool. Failure to do this would result in a
+useless waste of space.
+
+Users who are preparing their labs inside an operating system that is different
+from Linux may experience problems due to differences in line break conventions.
+In particular, Windows applications usually mark line breaks in text files with
+a sequence of CR+NL characters, while in Linux they only consist of a single NL.
+Using lab configuration files that have been processed inside some Windows
+editor may cause problems. In such a case, we recommend to use a standard conversion
+utility such as \fBflip\fR(1) on the
+affected files before using them.
+
+
+\" ########################################
+
+.SH "SEE ALSO"
+\fIflip\fR(1),
+\fIlclean\fR(1),
+\fIlstart\fR(1),
+\fIvstart\fR(1).
+
+
+\" ########################################
+
+.SH AUTHOR
+This man page: Massimo Rimondini

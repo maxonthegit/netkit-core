@@ -1,0 +1,142 @@
+INSTALLATION INSTRUCTIONS for Netkit
+====================================
+
+PRECONDITIONS
+-------------
+
+Netkit only runs under the Linux operating system. The toolkit is fairly
+independent from of the specific Linux distribution you have.
+
+It is strongly advised that you have an installed X server which provides you
+with a graphical environment. Netkit virtual machines can also be started in
+text only virtual terminals, but this limits considerably the flexibility when
+you have to start and manage several machines simultaneously. If you choose to
+start virtual machines inside windows of the graphical environment, you need to
+have a terminal emulator application like xterm, konsole, or gnome-terminal
+properly installed on your machine. Please refer to the documentation of your
+Linux distribution for information about installing these applications.
+
+In principle, there is no restriction on the host filesystem Netkit can be
+installed on. However, installing it on a non-standard Linux filesystem (e.g.,
+FAT32) is likely to cause performance losses and malfunctions. We *strongly*
+recommend to install Netkit on an ext2/ext3 filesystem. Most Linux distributions
+adopt ext3 as a default choice.
+
+
+INSTALLING NETKIT
+-----------------
+
+Starting from Netkit version 2, a complete Netkit distribution consists of three
+different packages:
+- the Netkit "core", which contains commands, documentation and other stuff
+  which is necessary for Netkit to work;
+- the Netkit filesystem, which contains the filesystem for virtual machines;
+- the Netkit kernel, which contains the kernel used by virtual machines.
+
+Please always make sure you are using the most recent available releases of the
+three packages. Upgrading some of them while leaving others stale may cause
+unpredictable malfunctions of the Netkit environment.
+
+--- STEP 1: DOWNLOAD AND UNPACK ---
+
+Download all the files to a directory of your choice. Then unpack them by using
+the following commands:
+
+  tar -xjSf netkit-x.y.tar.bz2
+  tar -xjSf netkit-filesystem-Fx.y.tar.bz2
+  tar -xjSf netkit-kernel-Kx.y.tar.bz2
+
+Note that all the three packages must be uncompressed while staying in the same
+directory. It is strongly advised to use the -S option to save space on your
+disk, because this option handles sparse files (i.e., files with lots of empty
+blocks) efficiently.
+
+Once Netkit has been unpacked, no root privileges are required to configure it
+and start working.
+
+--- STEP 2: CONFIGURATION ---
+
+The first step is to set the environment variable NETKIT_HOME to the name of the
+directory Netkit has been installed into. Versions of Netkit prior to 2 used
+variable VLAB_HOME. Such variable is supported as well, but you are encouraged
+not to use it. In order to access the Netkit man pages, the MANPATH variable
+must be set to ":$NETKIT_HOME/man". For example, assuming that you have
+installed Netkit to /home/foo/netkit and that your shell is bash, you would use
+the following commands:
+
+  export NETKIT_HOME=/home/foo/netkit
+  export MANPATH=:$NETKIT_HOME/man
+
+It may also be useful to put these lines inside your shell initialization file
+(`.bashrc' in case you are using the bash shell). Consult your shell
+documentation for more information about this.
+
+After doing this, you need to update your PATH environment variable to include
+the path to the standard Netkit commands. This is required in order to make
+Netkit work properly. The entry you need to add to the PATH is
+"$NETKIT_HOME/bin". For example, assuming Netkit is (still) installed into
+/home/foo/netkit and that your shell is (still) bash, you would type:
+
+  export PATH=$NETKIT_HOME/bin:$PATH
+
+Again, it may be convenient to put this line inside your shell initialization
+file.
+
+--- STEP 3: CHECK YOUR CONFIGURATION ---
+
+At this point, change the current directory to the Netkit directory:
+
+  cd netkit
+
+Now, run the `check_configuration.sh' script by typing:
+
+  ./check_configuration.sh
+
+This script takes care of checking whether your system is configured properly to
+make Netkit run. Any misconfigurations are signalled and instructions for fixing
+them are reported as well. If the script exits with success, then Netkit is
+ready for use.
+
+We suggest reading the documentation by starting from the man page netkit(7).
+
+
+TESTING YOUR INSTALLATION
+-------------------------
+
+In order to test whether Netkit is working properly, you can start a simple
+virtual machine by issuing the command:
+
+  vstart pc1
+
+If everything is in place, you should see a new virtual machine starting up
+(eventually popping up an xterm window) and the command `vlist' on the host
+machine should show an output which is similar to the following:
+
+  vlist
+
+  USER        VHOST               PID  UPTIME         SIZE  INTERFACES
+  foo         pc1               24102  00:03         12376
+
+  Total virtual machines:       1    (you),        1    (all users).
+  Total consumed memory:    12376 KB (you),    12376 KB (all users).
+
+You can stop the virtual machine by typing the following command on the host
+machine console:
+
+  vhalt -r pc1
+
+You can now delete the file pc1.log.
+
+
+COMMAND AUTOCOMPLETION
+----------------------
+
+As an additional feature, users of the bash shell can take advantage of command line autocompletion for Netkit commands (supported starting from release 2.7).
+In order to activate it, first of all make sure your shell is bash:
+
+  readlink -f $SHELL
+
+If it is, then you can safely add the following line at the end of your ~/.bashrc file:
+
+  . $NETKIT_HOME/bin/netkit_bash_completion
+
