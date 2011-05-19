@@ -1,0 +1,61 @@
+#Give this a task like
+#uml-task-info current_task
+#it will dump info about it
+define uml-task-info
+set $tstate = "Unknown"
+if $arg0->state == 0
+ set $tstate = "R"
+end
+if $arg0->state == 1
+ set $tstate = "S"
+end
+if $arg0->state == 2
+ set $tstate = "D"
+end
+if $arg0->state == 4
+ set $tstate = "Z"
+end
+if $arg0->state == 8
+ set $tstate = "T"
+end
+printf "PID(ext): %d(%d)\tState: %s UID(E): %d(%d) \tCmd: %10s @ 0x%x\n", $arg0->pid, $arg0->thread.extern_pid, $tstate, \
+ $arg0->uid, $arg0->euid, $arg0->comm, $arg0
+end
+
+#dump out the info for the files the task has open
+define uml-task-files
+set $files = $arg0->files
+set $max = $files->max_fds
+set $i = 0
+if $max > 32
+ set $max = 32
+end
+while $i < $max
+ if $files->fd_array[$i] != 0
+  printf "     File fd = %d Name: %s\n", $i, $files->fd_array[$i]->f_dentry.d_iname
+ end
+ set $i = $i + 1
+end
+end
+
+#walk though the task list and print info about them
+define uml-tasks
+set $current_task = (struct task_struct *)cpu_tasks[0].task
+uml-task-info $current_task
+set $p = $current_task.next_task
+while $p != $current_task
+ uml-task-info $p
+ if $uml_task > 1
+  uml-task-files $p
+ end
+ set $p = $p->next_task
+end
+end
+
+
+#Vars depend on how much info we dump
+#$uml_task = (*  ) always dump some info
+#$uml_task = (> 0) dump open files
+set $uml_task = 0
+
+

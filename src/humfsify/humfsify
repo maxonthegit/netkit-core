@@ -1,0 +1,58 @@
+#!/bin/bash                                                                     
+user=$1 ;
+group=$2 ;
+size=$3 ;
+
+if [ -z "$user" -o -z "$group" -o -z "$size" ]
+then
+    echo Usage : humfsify user group size;
+    exit 1 ;
+fi
+
+case $size in
+    [0-9]*K) size=$[ `echo $size | sed s/K$//` * 1024 ] ;;
+    [0-9]*M) size=$[ `echo $size | sed s/M$//` * 1024 * 1024 ] ;;
+    [0-9]*G) size=$[ `echo $size | sed s/G$//` * 1024 * 1024 * 1024] ;;
+    [0-9]*) ;;
+    *) echo "Bad filesystem size - '$size'";
+       exit 1 ;;
+esac
+
+used=$[ `du -sk data | awk '{print $1}'` * 1024 ];
+
+if [ $used -gt $size ]
+then
+    echo "Current disk usage greater than the requested size - $used vs $size" ;
+    exit 1
+fi
+
+for f in `cd data ; find .` ; do
+    full=data/$f;
+
+    uid=`cd data ; ls -ld $f | awk '{print $3}'` ;
+    [ `echo $uid | sed 's/^[0-9]*$//'` ] && uid=`id -u $uid` ;
+
+    gid=`cd data ; ls -ld $f | awk '{print $4}'` ;
+    [ `echo $gid | sed 's/^[0-9]*$//'` ] &&
+        gid=`awk -F: "{ if(\\$1==\"$gid\") print \\$3 }" /etc/group | head -1` ;
+    
+    meta=metadata/$f ;
+    if [ -d $full ]
+    then
+	mkdir -p $meta ;
+	chown $user.$group $meta ;
+	meta=$meta/metadata ;
+    else
+	mkdir -p metadata/`dirname $f` ;
+	chown $user.$group metadata/`dirname $f` ;
+    fi
+    chown $user.$group $full ;
+    echo $uid $gid >> $meta ;
+    chown $user.$group $meta ;
+done
+
+cat >> superblock <<EOF
+version 1
+used $used
+total $size
+EOF

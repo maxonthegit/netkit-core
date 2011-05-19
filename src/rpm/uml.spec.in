@@ -1,0 +1,600 @@
+Name:				user_mode_linux
+Summary:			The user-mode port of the Linux kernel
+Version:			%{version}
+Release:			0
+Copyright:			GPL
+Packager:			Jeff Dike <jdike@karaya.com>
+Group:				Utilities/System
+Source:				http://download.sourceforge.net/user-mode-linux/uml-patch-%{version}
+Vendor:				Jeff Dike <jdike@karaya.com>
+URL:				http://user-mode-linux.sourceforge.net/
+
+%description
+This is the user-mode port of the Linux kernel - it runs a virtual 
+machine in a set of Linux processes.  This package also contains a 
+number of other useful tools and utilities related to UML.
+
+%changelog
+* Sat Dec 29 2001 Jeff Dike <jdike@karaya.com>
+- Kernel changes:
+- Updated UML to 2.4.17 
+- 
+- Added a port channel, which allows UML consoles and serial lines to be
+- attached to a host port, where they can be accessed with telnet.  
+- 
+- Redid the context switching mechanism so that it's far simpler and
+- probably much faster.  
+- 
+- Fixed a couple of SIGIO setup buglets. 
+- 
+- UML can now be shut down by sending a SIGINT or SIGTERM to the tracing
+- thread.  
+- 
+- Terminal mode handling is now cleaner.  main no longer saves and restores
+- the modes of stdin/stdout/stderr.  
+- 
+- The async IO signal is now explicitly set to SIGIO. 
+- 
+- General purpose registers are now stored properly in core files. 
+- 
+- The drivers again are compiled in or not depending on whether they were
+- configured in.  
+- 
+- Cleaned up the network portion of the config. 
+- 
+- Userspace changes:
+- Added port-helper, which is a helper needed for the new port channel. 
+- 
+- Fixed another potential exploit. 
+- 
+- Fixed an exploitable buffer overflow in uml_net and tightened up buffer
+- use in general. 
+- 
+
+* Sun Dec  9 2001 Jeff Dike <jdike@karaya.com
+- Kernel changes:
+- Updated to 2.4.16. 
+- 
+- gdb is now much more responsive to ^C and it's now possible to interrupt
+- processes in userspace.  
+- 
+- Did some major cleanup of the ptrace proxy. 
+- 
+- Fixed ^S and ^Q. 
+- 
+- mconsole commands can now run from either interrupt context or process
+- context.  The ones that run from interrupt context are now much more
+- likely to happen when UML is sick.  
+- 
+- There is now a 'cad' command, which simulates Ctrl-Alt-Del. 
+- 
+- UML will now boot with 'con=pty', although the console output never
+- appears on its assigned pty for some reason.  
+- 
+- Core dump support is now there, except that the registers aren't dumped
+- correctly, so they don't make gdb very happy.  
+- 
+- There is some support for SIGWINCH.  If the main console is stdin/stdout
+- and you resize that window, whatever is running in it will get a
+- SIGWINCH. Other things, like other xterms and ptys, won't generate
+- SIGWINCH for UML because they are not controlling terminals for it. 
+- 
+- A couple of problems with rebooting were fixed.  An overlap between errno
+- and some code, causing that code to be corrupted, was fixed.  The new
+- channel stuff was accidentally closing stdin and stdout on shutdown,
+- making the subsequent reboot rather interesting. 
+- 
+- The error message from the TUN/TAP backend was fixed. 
+- 
+- Fixed a crash caused by the gdb cleanup when gdb hadn't run. 
+- 
+- The window IDs in xterms are now gone. 
+- 
+- Ptys are now hung up properly.  So, disconnecting from a console or serial
+- line on a pty will no longer hang UML.  
+
+* Sun Nov 25 2001 Jeff Dike <jdike@karaya.com>
+- Kernel changes:
+- Reorganized the host channel support code. 
+- 
+- The mconsole protocol is now structured, rather than being plain text. You
+- will need the new mconsole client in order to do mconsole things with this
+- kernel.  
+- 
+- Fixed a data corruption bug in the last patch. 
+- 
+- Improved the error message that gets printed when there are no
+- multcast-capable interfaces on the host.  
+- 
+- Fixed a bug in kill_child_dead. 
+- 
+- It is now possible to write to a COW-ed device that contains a non-root
+- filesystem.  
+- 
+- The errors that get spit out from uml_net when you remove a net device are
+- gone.  
+- 
+- Compilation warnings were fixed, and various bit of code were cleaned up. 
+- 
+- The network backends now pass the netmask to uml_net so it can do proxy
+- arp properly.  You will need the latest utilities in order to run this.  
+- 
+- There is support for RT signals in the form of a siginfo struct on the
+- stack if necessary.  There is no ucontext on the stack as yet.  
+- 
+- Fixed a bug which could cause a hang with a process receiving infinite
+- segfaults.  
+- 
+- wait_for_stop now passes SIGINT to the process so ^C at the wrong time
+- won't panic the tracing thread.  
+- 
+- Fixed a bug in sigsuspend and rt_sigsuspend which caused them to return
+- incorrect values.  
+- 
+- Fixed the tuntap packet dropping problem, fixed the same bug in all the
+- other transports, and merged all the read routines.  
+- 
+- Added some latent support for uml_net being able to do proxy arp
+- intelligently.  
+- 
+- Userspace changes:
+- Updated uml_mconsole to use the new protocol. 
+- 
+- Proxy arp is now smart enough to only add arp entries to interfaces which
+- are on the local network.   
+- 
+- Slip now supports changing IP addresses. 
+- 
+
+* Sun Nov 25 2001 Jeff Dike <jdike@karaya.com>
+- Kernel changes:
+- Reorganized the host channel support code. 
+- 
+- The mconsole protocol is now structured, rather than being plain text. You
+- will need the new mconsole client in order to do mconsole things with this
+- kernel.  
+- 
+- Fixed a data corruption bug in the last patch. 
+- 
+- Improved the error message that gets printed when there are no
+- multcast-capable interfaces on the host.  
+- 
+- Fixed a bug in kill_child_dead. 
+- 
+- It is now possible to write to a COW-ed device that contains a non-root
+- filesystem.  
+- 
+- The errors that get spit out from uml_net when you remove a net device are
+- gone.  
+- 
+- Compilation warnings were fixed, and various bit of code were cleaned up. 
+- 
+- The network backends now pass the netmask to uml_net so it can do proxy
+- arp properly.  You will need the latest utilities in order to run this.  
+- 
+- There is support for RT signals in the form of a siginfo struct on the
+- stack if necessary.  There is no ucontext on the stack as yet.  
+- 
+- Fixed a bug which could cause a hang with a process receiving infinite
+- segfaults.  
+- 
+- wait_for_stop now passes SIGINT to the process so ^C at the wrong time
+- won't panic the tracing thread.  
+- 
+- Fixed a bug in sigsuspend and rt_sigsuspend which caused them to return
+- incorrect values.  
+- 
+- Fixed the tuntap packet dropping problem, fixed the same bug in all the
+- other transports, and merged all the read routines.  
+- 
+- Added some latent support for uml_net being able to do proxy arp
+- intelligently.  
+- 
+- Userspace changes:
+- Updated uml_mconsole to use the new protocol. 
+- 
+- Proxy arp is now smart enough to only add arp entries to interfaces which
+- are on the local network.   
+- 
+- Slip now supports changing IP addresses. 
+- 
+
+* Tue Nov 13 2001 Jeff Dike <jdike@karaya.com>
+- Kernel changes:
+- Updated to 2.4.14. 
+- 
+- Redid the task switching code.  The tracing thread is no longer involved.
+- Rather, the two threads arrange it themselves with one sending a SIGTERM
+- to the other, and protecting itself from races by blocking SIGTERM and
+- re-enabling it with sigsuspend.
+- 
+- Fixed a bug in the new poll code which could cause pollfd structs to be lost. 
+- 
+- UML now works on 3G/1G hosts when CONFIG_HOST_2G_2G is on. 
+- 
+- sigio_handler now uses poll instead of select. 
+- 
+- Every thread now has a private page of data which contains errno. 
+- 
+- Cleaned up some code and Makefiles. 
+- 
+- Sped up context switching some more by removing the code that unmapped
+- pages that weren't present to begin with.  
+- 
+- Cleaned up some code. 
+- 
+- Fixed the process segfaults caused by Xnest and kernel builds.  The same
+- fix also makes gdb work better.  
+- 
+- Fixed a typo in arch/um/kernel/Makefile which caused modules not to load
+- into a profiled kernel.  
+- 
+- Jorgen Cederlof's context switch optimization is now turned on. 
+- 
+- Userspace changes:
+- Restructured the uml_net sources to make them more modular. 
+- 
+- uml_net should now do proxy arp correctly. 
+- 
+- uml_mconsole can now take a command on its command line. 
+- 
+
+* Fri Oct 26 2001 Jeff Dike <jdike@karaya.com>
+- Kernel changes:
+- defconfig now turns on CONFIG_PACKET. 
+- 
+- Profiled modules can now be loaded without undefined symbols. 
+- 
+- Fixed a segfault on startup caused by an early unexpected malloc in a
+- profiling UML.  
+- 
+- Added sys_readahead support. 
+- 
+- The network backends are now able to cleanly print the commands that
+- uml_net runs and their output.  
+- 
+- Physical memory protection is now optional and is controlled by the 'jail'
+- switch.  
+- 
+- Fixed the TMP/TMPDIR/TEMPDIR support. 
+- 
+- Fixed a bug with uml_dir not having a trailing '/'. 
+- 
+- Fixed the initrd botch in -2 and also appear to have made the linker error
+- go away.  
+- 
+- Argument parsing and some initialization is now done in the same way as
+- the generic kernel, with structures being put into special sections of the
+- binary, and initialization code iterates over that section doing whatever
+- is necessary.  
+- 
+- The initrd code is now split out from everything else, removing a pile of
+- ifdefs.  
+- 
+- ppc cleanups from Chris 
+- 
+- Various other small cleanups 
+- 
+- Userspace changes:
+- Set the uml_net VERSION to 3. 
+- 
+- uml_net can now feed command lines and output back to UML. 
+- 
+- uml_net now doesn't segfault if someone runs it by hand with no arguments. 
+- 
+- uml_net sets up proxy arp by changing
+- /proc/sys/net/ipv4/conf/DEV/proxy_arp rather than by running arp.  
+- 
+
+* Fri Oct 26 2001 Jeff Dike <jdike@karaya.com>
+- Kernel changes:
+- defconfig now turns on CONFIG_PACKET. 
+- 
+- Profiled modules can now be loaded without undefined symbols. 
+- 
+- Fixed a segfault on startup caused by an early unexpected malloc in a
+- profiling UML.  
+- 
+- Added sys_readahead support. 
+- 
+- The network backends are now able to cleanly print the commands that
+- uml_net runs and their output.  
+- 
+- Physical memory protection is now optional and is controlled by the 'jail'
+- switch.  
+- 
+- Fixed the TMP/TMPDIR/TEMPDIR support. 
+- 
+- Fixed a bug with uml_dir not having a trailing '/'. 
+- 
+- Fixed the initrd botch in -2 and also appear to have made the linker error
+- go away.  
+- 
+- Argument parsing and some initialization is now done in the same way as
+- the generic kernel, with structures being put into special sections of the
+- binary, and initialization code iterates over that section doing whatever
+- is necessary.  
+- 
+- The initrd code is now split out from everything else, removing a pile of
+- ifdefs.  
+- 
+- ppc cleanups from Chris 
+- 
+- Various other small cleanups 
+- 
+- Userspace changes:
+- Set the uml_net VERSION to 3. 
+- 
+- uml_net can now feed command lines and output back to UML. 
+- 
+- uml_net now doesn't segfault if someone runs it by hand with no arguments. 
+- 
+- uml_net sets up proxy arp by changing
+- /proc/sys/net/ipv4/conf/DEV/proxy_arp rather than by running arp.  
+- 
+
+* Thu Oct 11 2001 Jeff Dike <jdike@karaya.com>
+- Kernel changes:
+-  Updated to 2.4.12 
+- 
+- Userspace changes:
+
+* Wed Oct 10 2001 Jeff Dike <jdike@karaya.com>
+- Kernel changes:
+-  Fixed a couple of MAP_SHARED that I missed last time. 
+- 
+-  Updated config.release 
+- 
+-  Redid the signal delivery code so that the code running on the process stack doesn't need to modify the task structure.  This allowed the task structure to be write-protected while in userspace, so that all of physical memory is protected now. 
+- 
+-  applied some patches from Andrea Archangeli 
+- 
+-  fixed the protect panic 
+- 
+-  wrapped '#ifdef __CONFIG_SMP' around smp.h to give ppc a better chance of building  
+- 
+-  mrproper now removes the header symlinks 
+- 
+-  Fixed a signal delivery bug which caused interrupted system calls to return the wrong value. 
+- 
+-  Fixed a crash caused by typing at a console 
+- 
+-  More ppc updates 
+- 
+-  CONFIG_DEBUG_SLAB is now configurable 
+- 
+-  Compilation warnings eliminated and some minor cleanups made 
+- 
+-  Updated to 2.4.11 
+- 
+-  Converted OX_OBJS to export_objs 
+- 
+- Userspace changes:
+-  Added top-level all, clean, and install rules. 
+- 
+-  Added a copy of the GPL 
+- 
+-  Changed uml_router to uml_switch 
+- 
+-  uml_switch now has a -hub switch 
+- 
+-  Converted the uml_switch main loop from select to poll 
+- 
+
+* Tue Sep 25 2001 Jeff Dike <jdike@karaya.com>
+- Kernel changes:
+- There is now a TUN/TAP backend for the network driver. 
+- 
+- UML no longer hangs when it can't find xterm. 
+- 
+- It complains more informatively when the host is out of ptys. 
+- 
+- The TUN/TAP backend now works properly.  You'll need to grab the latest
+- uml_net from CVS /tools/uml_net even if you grabbed the one for 2.4.9-2um.  
+- 
+- Fixed the process segfaults that happened when the system was swapping. 
+- 
+- Merged the latest ppc changes. 
+- 
+- malloc, free, and calloc are now wrapped and redirected to kmalloc/kfree
+- if they're running, and the normal libc functions if not.  This fixes
+- gprof and gcov crashes when they tried to allocate memory when opening
+- their output files.  It also closes a possible security hole.  
+- 
+- The block driver now reports IO errors back to the block layer. 
+- 
+- COW headers now contain absolute pathnames to their backing files. 
+- 
+- Fixed some smp.h compilation problems. 
+- 
+- Fixed a couple of profiling timer problems. 
+- 
+- UML now loads itself and its memory into the top of the address
+- space. This cleans up a lot of code, and also probably fixes the mlockall
+- bug.  
+- 
+- The COW header is at version 2, which supports filename lengths up to
+- MAXPATHLEN and is in network byte order.  
+- 
+- A gprof buglet was also fixed. 
+- 
+- Process stacks are now normally below kernelspace rather than above it.   
+- 
+- UML is now more intelligent about allocating its virtual memory area, so
+- it's possible to run with more physical memory.  I got up to 464M, at
+- which point I was down to 8M of kernel virtual memory.  
+- 
+- The former CONFIG_2G_2G is now CONFIG_HOST_2G_2G. 
+- 
+- Cleaned up the signal delivery code and the network device config 
+- 
+- Updated the mmapper driver 
+- 
+- ubd COW bitmaps are now vmalloced 
+- 
+- Removed some 64-bit uncleanliness from the ubd driver 
+- 
+- Fixed and cleaned up the tlb flush code 
+- 
+- Updated to 2.4.10 
+- 
+- Fixed the sigaltstack problem that prevented UML from booting on 2.2 hosts. 
+- 
+- Userspace changes:
+- Added 'quit' and 'switch' to the mconsole. 
+- 
+- Also added some local help. 
+- 
+- uml_net now is as helpful with TUN/TAP as with ethertap, creating
+- directories and device nodes and insmod-ing modules if necessary.  
+- 
+- uml_net also now insmods netlink-dev for ethertap. 
+
+* Tue Sep 25 2001 Jeff Dike <jdike@karaya.com>
+- Kernel changes:
+- There is now a TUN/TAP backend for the network driver. 
+- 
+- UML no longer hangs when it can't find xterm. 
+- 
+- It complains more informatively when the host is out of ptys. 
+- 
+- The TUN/TAP backend now works properly.  You'll need to grab the latest
+- uml_net from CVS /tools/uml_net even if you grabbed the one for 2.4.9-2um.  
+- 
+- Fixed the process segfaults that happened when the system was swapping. 
+- 
+- Merged the latest ppc changes. 
+- 
+- malloc, free, and calloc are now wrapped and redirected to kmalloc/kfree
+- if they're running, and the normal libc functions if not.  This fixes
+- gprof and gcov crashes when they tried to allocate memory when opening
+- their output files.  It also closes a possible security hole.  
+- 
+- The block driver now reports IO errors back to the block layer. 
+- 
+- COW headers now contain absolute pathnames to their backing files. 
+- 
+- Fixed some smp.h compilation problems. 
+- 
+- Fixed a couple of profiling timer problems. 
+- 
+- UML now loads itself and its memory into the top of the address
+- space. This cleans up a lot of code, and also probably fixes the mlockall
+- bug.  
+- 
+- The COW header is at version 2, which supports filename lengths up to
+- MAXPATHLEN and is in network byte order.  
+- 
+- A gprof buglet was also fixed. 
+- 
+- Process stacks are now normally below kernelspace rather than above it.   
+- 
+- UML is now more intelligent about allocating its virtual memory area, so
+- it's possible to run with more physical memory.  I got up to 464M, at
+- which point I was down to 8M of kernel virtual memory.  
+- 
+- The former CONFIG_2G_2G is now CONFIG_HOST_2G_2G. 
+- 
+- Cleaned up the signal delivery code and the network device config 
+- 
+- Updated the mmapper driver 
+- 
+- ubd COW bitmaps are now vmalloced 
+- 
+- Removed some 64-bit uncleanliness from the ubd driver 
+- 
+- Fixed and cleaned up the tlb flush code 
+- 
+- Updated to 2.4.10 
+- 
+- Fixed the sigaltstack problem that prevented UML from booting on 2.2 hosts. 
+- 
+- Userspace changes:
+- Added 'quit' and 'switch' to the mconsole. 
+- 
+- Also added some local help. 
+- 
+- uml_net now is as helpful with TUN/TAP as with ethertap, creating
+- directories and device nodes and insmod-ing modules if necessary.  
+- 
+- uml_net also now insmods netlink-dev for ethertap. 
+
+* Thu Aug 16 2001 Jeff Dike <jdike@karaya.com>
+- Kernel -
+- Updated to 2.4.9
+- Some signal handling fixes
+- Started protecting kernel memory from malicious processes
+- Userspace -
+- None
+
+* Sun Aug 12 2001 Jeff Dike <jdike@karaya.com>
+- Kernel -
+- Updated to 2.4.8
+- Fixed the TASK_UNINTERRUPTIBLE deadlock again
+- hostfs writes go through the page cache
+- Finished merging the ppc port
+- Fixed a crash if an interface tries to get an ether address without 
+- having an IP address
+- Fixed an old bug which only showed up now which caused 2.4.7 not to boot
+- Fixed hostfs ls on 2.4 hosts
+- Fixed gprof support
+- Added text to Configure.help
+- The pid file now always contains the right pid
+- hostfs again should compile and run on 2.2
+- ethertap eth devices can have their addresses changed on the fly 
+- Userspace -
+- uml_net now changes the host configuration to follow IP address changes
+- inside UML
+
+* Wed Jul  4 2001 Jeff Dike <jdike@karaya.com>
+- Merged the management console
+- Many bug fixes
+- 64 bit IO works again
+
+* Wed Mar  7 2001 Jeff Dike <jdike@karaya.com>
+- Redid the network drivers
+
+* Wed Mar  7 2001 Jeff Dike <jdike@karaya.com>
+- initial version
+
+
+%prep
+
+rm -rf uml
+mkdir uml
+cd uml
+cp $ZTARBALL .
+compressed=`echo user_mode_linux*`
+gunzip $compressed
+archive=`echo $compressed | sed 's/.gz$//'`
+tar xf $archive .
+
+%build
+
+cd uml
+make all
+
+%install
+
+rm -rf $UML_BUILD_DIR
+mkdir $UML_BUILD_DIR
+cd uml
+make install DESTDIR=$UML_BUILD_DIR
+						
+%clean
+rm -rf uml
+
+%files
+%defattr(-,root,root)
+%attr(755,root,root)				/usr/bin/linux
+%attr(644,root,root)                            /usr/lib/uml/modules-2.2.tar
+%attr(644,root,root)                            /usr/lib/uml/modules-2.4.tar
+%attr(755,root,root)				/usr/bin/mkrootfs
+%attr(755,root,root)				/usr/lib/uml/functions
+%attr(644,root,root)				/usr/lib/uml/config
+%attr(644,root,root)				/usr/lib/uml/port-helper
+%attr(4755,root,root)				/usr/bin/uml_net
+%attr(755,root,root)				/usr/bin/uml_switch
+%attr(755,root,root)				/usr/bin/uml_moo
+%attr(755,root,root)				/usr/bin/uml_mconsole
+#%attr(644,root,root)                            /usr/doc/HOWTO/UserModeLinux-HOWTO

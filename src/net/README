@@ -1,0 +1,66 @@
+There are a lot of requirements you must have before this will work:
+-2.2.x or 2.4.x host kernel
+-Ethertap of TUN/TAP support in the host kernel
+-bridging support in the host kernel
+-bridging configuration utilities on the host filesystem
+-'um_eth_tool' on the UM filesystem **
+
+To use:
+
+UML to Host connection - technique 1
+------------------------------------
+eth0 is eth UM virtual interface
+tap0 is the TAP device on the host
+br0 is the bridge interface on the host
+
+uml-1> um_eth_tool -i eth0 -a tap0
+uml-1> ifconfig eth0 10.0.0.1 netmask 255.255.255.0
+host> brctl addbr br0
+host> brctl addif br0 tap0
+host> ifconfig tap0 up
+host> ifconfig br0 10.0.0.254 netmask 255.255.255.0
+
+.... wait for the bridging code to go into the forwarding state ....
+
+host> ping 10.0.0.1
+uml-1> ping 10.0.0.254
+
+UML to Host connection - technique 2
+------------------------------------
+eth0 is eth UM virtual interface
+tap0 is the TAP device on the host
+
+uml-1> um_eth_tool -i eth0 -a tap0
+uml-1> ifconfig eth0 10.0.0.1 netmask 255.255.255.0
+host> ifconfig tap0 10.0.0.254 netmask 255.255.255.0
+
+.... wait for the bridging code to go into the forwarding state ....
+
+host> ping 10.0.0.1
+uml-1> ping 10.0.0.254
+
+UML to UML connection
+---------------------
+uml-1> um_eth_tool -i eth1 -a tap1
+uml-1> ifconfig eth1 10.0.1.1 netmask 255.255.255.0
+uml-2> um_eth_tool -i eth2 -a tap2
+uml-2> ifconfig eth2 10.0.1.2 netmask 255.255.255.0
+host> brctl addbr br1
+host> ifconfig br1 up
+host> ifconfig tap1 up
+host> ifconfig tap2 up
+host> brctl addif br1 tap1
+host> brctl addif br1 tap2
+
+.... wait for the bridging code to go into the forwarding state ....
+
+uml-1> ping 10.0.1.2
+uml-2> ping 10.0.1.1
+
+UML to physical ethernet
+------------------------
+
+In theory this should work, but I couldn't figure it out
+If anyone gets it to work, please share ...
+
+You can contact me at jleu@mindspring.com for help
