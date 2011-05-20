@@ -1,0 +1,19 @@
+--- uml_router/tuntap.c	2002-04-27 19:02:16.000000000 +0200
++++ uml_router/tuntap.c	2009-05-01 23:31:21.088773438 +0200
+@@ -6,6 +6,7 @@
+ #include <sys/ioctl.h>
+ #include <net/if.h>
+ #include <linux/if_tun.h>
++#include "switch.h"
+ #include "port.h"
+ 
+ static void send_tap(int fd, void *packet, int len, void *unused)
+@@ -35,7 +36,7 @@
+     close(fd);
+     return(-1);
+   }
+-  err = setup_port(fd, send_tap, NULL, 0);
++  err = setup_port(fd, send_tap, NULL, 0, 0);
+   if(err) return(err);
+   return(fd);
+ }

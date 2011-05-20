@@ -1,0 +1,10 @@
+--- uml_router/Makefile	2003-02-19 01:16:27.000000000 +0100
++++ uml_router/Makefile	2009-05-01 23:31:20.088977298 +0200
+@@ -1,6 +1,6 @@
+ TUNTAP = $(shell [ -e /usr/include/linux/if_tun.h ] && echo -DTUNTAP)
+ 
+-OBJS = hash.o port.o uml_switch.o 
++OBJS = hash.o port.o uml_switch.o
+ BIN = uml_switch
+ CFLAGS = -g -Wall $(TUNTAP)
+ 

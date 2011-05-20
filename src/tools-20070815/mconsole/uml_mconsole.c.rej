@@ -1,0 +1,25 @@
+--- mconsole/uml_mconsole.c	2004-04-08 03:43:29.000000000 +0200
++++ mconsole/uml_mconsole.c	2011-05-20 12:16:00.044639001 +0200
+@@ -62,6 +62,22 @@
+   int try_file = 1;
+ 
+   if((home = getenv("HOME")) != NULL){
++
++    /*****************************************/
++    /* Changed for compatibility with Netkit */
++    /*****************************************/
++
++    /* Management consoles are made available inside .netkit
++       in the user's home directory. Look there first and
++       everywhere else only in case of failure. */
++
++    snprintf(dir, sizeof(dir), "%s/.netkit/mconsole", home);
++    snprintf(file, sizeof(file), "%s/%s/mconsole", dir, name);
++    if(strncmp(name, dir, strlen(dir))){
++      if(!do_switch(dir, file, name)) return(0);
++      try_file = 0;
++    }
++
+     snprintf(dir, sizeof(dir), "%s/.uml", home);
+     snprintf(file, sizeof(file), "%s/%s/mconsole", dir, name);
+     if(strncmp(name, dir, strlen(dir))){
