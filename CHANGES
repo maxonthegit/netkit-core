@@ -1,3 +1,11 @@
+2.9
+  - for helping developpers, sources of the uml tools are in src/ directory and
+    patches are applied during build
+  - removing previous uml tools binaries
+  - support for vdump (via uml_dump): small utility to connect wireshark or
+    tcpdump directly to a uml_switch
+  - removing obsolete goals in Makefile
+
 2.8
   - uml-utilities have been recompiled with dynamic linking and with Ubuntu
     patches applied. This makes them work also under Ubuntu 10.10. Moreover,

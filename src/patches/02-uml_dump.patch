@@ -1,18 +1,18 @@
-diff -rupN tools-original/Makefile tools/Makefile
---- tools-original/Makefile	2004-04-08 03:42:59.000000000 +0200
-+++ tools/Makefile	2009-05-01 23:31:00.106571852 +0200
+diff -Naur tools-20070815//Makefile build/Makefile
+--- tools-20070815//Makefile	2006-02-27 20:38:55.000000000 +0100
++++ build/Makefile	2011-05-20 22:12:26.944885002 +0200
 @@ -1,7 +1,7 @@
  TUNCTL = $(shell [ -e /usr/include/linux/if_tun.h ] && echo tunctl)
  
- SUBDIRS = jail jailtest humfsify mconsole moo port-helper $(TUNCTL) uml_net \
--	uml_router watchdog
-+	uml_router watchdog uml_dump
+ SUBDIRS = lib jail jailtest humfsify mconsole moo port-helper $(TUNCTL) \
+-	uml_net uml_switch watchdog umlfs
++	uml_net uml_switch watchdog umlfs uml_dump
  UMLVER = $(shell date +%Y%m%d)
- TARBALL = uml_utilities_$(UMLVER).tar
+ TARBALL = uml_utilities_$(UMLVER).tar.bz2
  BIN_DIR = /usr/bin
-diff -rupN tools-original/uml_dump/Makefile tools/uml_dump/Makefile
---- tools-original/uml_dump/Makefile	1970-01-01 01:00:00.000000000 +0100
-+++ tools/uml_dump/Makefile	2009-05-01 23:31:15.860900482 +0200
+diff -Naur tools-20070815//uml_dump/Makefile build/uml_dump/Makefile
+--- tools-20070815//uml_dump/Makefile	1970-01-01 01:00:00.000000000 +0100
++++ build/uml_dump/Makefile	2011-05-20 22:13:52.916885002 +0200
 @@ -0,0 +1,17 @@
 +OBJS = uml_dump.o
 +BIN = uml_dump
@@ -31,9 +31,9 @@ diff -rupN tools-original/uml_dump/Makefile tools/uml_dump/Makefile
 +install : $(BIN)
 +	install -d $(DESTDIR)$(BIN_DIR)
 +	install -s $(BIN) $(DESTDIR)$(BIN_DIR)
-diff -rupN tools-original/uml_dump/uml_dump.c tools/uml_dump/uml_dump.c
---- tools-original/uml_dump/uml_dump.c	1970-01-01 01:00:00.000000000 +0100
-+++ tools/uml_dump/uml_dump.c	2009-05-17 13:42:58.692577826 +0200
+diff -Naur tools-20070815//uml_dump/uml_dump.c build/uml_dump/uml_dump.c
+--- tools-20070815//uml_dump/uml_dump.c	1970-01-01 01:00:00.000000000 +0100
++++ build/uml_dump/uml_dump.c	2011-05-20 22:25:25.188885000 +0200
 @@ -0,0 +1,276 @@
 +/*
 + * Copyright 2008 
@@ -59,9 +59,9 @@ diff -rupN tools-original/uml_dump/uml_dump.c tools/uml_dump/uml_dump.c
 +#include <signal.h>
 +#include <stdio.h>
 +
-+#include "../uml_router/switch.h"
-+#include "../uml_router/uml_switch.h"
-+#include "../uml_router/port.h"
++#include "../uml_switch/switch.h"
++#include "../uml_switch/uml_switch.h"
++#include "../uml_switch/port.h"
 +
 +/***************** PCAP Part *****************/
 +
@@ -311,20 +311,9 @@ diff -rupN tools-original/uml_dump/uml_dump.c tools/uml_dump/uml_dump.c
 +
 +  return 0;
 +}
-diff -rupN tools-original/uml_router/Makefile tools/uml_router/Makefile
---- tools-original/uml_router/Makefile	2003-02-19 01:16:27.000000000 +0100
-+++ tools/uml_router/Makefile	2009-05-01 23:31:20.088977298 +0200
-@@ -1,6 +1,6 @@
- TUNTAP = $(shell [ -e /usr/include/linux/if_tun.h ] && echo -DTUNTAP)
- 
--OBJS = hash.o port.o uml_switch.o 
-+OBJS = hash.o port.o uml_switch.o
- BIN = uml_switch
- CFLAGS = -g -Wall $(TUNTAP)
- 
-diff -rupN tools-original/uml_router/port.c tools/uml_router/port.c
---- tools-original/uml_router/port.c	2003-03-12 17:35:03.000000000 +0100
-+++ tools/uml_router/port.c	2009-05-01 23:31:20.593666238 +0200
+diff -Naur tools-20070815//uml_switch/port.c build/uml_switch/port.c
+--- tools-20070815//uml_switch/port.c	2006-02-27 22:02:45.000000000 +0100
++++ build/uml_switch/port.c	2011-05-20 22:17:31.188885002 +0200
 @@ -8,25 +8,6 @@
  #include "hash.h"
  #include "port.h"
@@ -351,13 +340,12 @@ diff -rupN tools-original/uml_router/port.c tools/uml_router/port.c
  static struct port *head = NULL;
  
  #define IS_BROADCAST(addr) ((addr[0] & 1) == 1)
-@@ -107,7 +88,16 @@ static void send_dst(struct port *port, 
+@@ -107,7 +88,15 @@
        (*p->sender)(p->control, packet, len, p->data);
      }
    }
 -  else (*target->sender)(target->control, packet, len, target->data);
 +  else {
-+
 +    /* looking for dump port */
 +    for(p = head; p != NULL; p = p->next){
 +      if(p == port) continue;
@@ -369,7 +357,7 @@ diff -rupN tools-original/uml_router/port.c tools/uml_router/port.c
  }
  
  static void handle_data(int fd, int hub, struct packet *packet, int len, 
-@@ -149,7 +139,7 @@ void handle_tap_data(int fd, int hub)
+@@ -149,7 +138,7 @@
  }
  
  int setup_port(int fd, void (*sender)(int fd, void *packet, int len, 
@@ -378,7 +366,7 @@ diff -rupN tools-original/uml_router/port.c tools/uml_router/port.c
  {
    struct port *port;
  
-@@ -165,6 +155,7 @@ int setup_port(int fd, void (*sender)(in
+@@ -165,6 +154,7 @@
    port->data = data;
    port->data_len = data_len;
    port->sender = sender;
@@ -386,7 +374,7 @@ diff -rupN tools-original/uml_router/port.c tools/uml_router/port.c
    head = port;
    printf("New connection\n");
    return(0);
-@@ -215,7 +206,7 @@ void handle_sock_data(int fd, int hub)
+@@ -216,7 +206,7 @@
    handle_data(fd, hub, &packet, len, &data, match_sock);
  }
  
@@ -395,7 +383,7 @@ diff -rupN tools-original/uml_router/port.c tools/uml_router/port.c
  {
    struct sock_data *data;
  
-@@ -226,7 +217,7 @@ int setup_sock_port(int fd, struct socka
+@@ -227,7 +217,7 @@
    }
    *data = ((struct sock_data) { fd : 	data_fd,
  				sock :	*name });
@@ -404,30 +392,9 @@ diff -rupN tools-original/uml_router/port.c tools/uml_router/port.c
  }
  
  static void service_port(struct port *port)
-@@ -235,9 +226,12 @@ static void service_port(struct port *po
-   char c;
- 
-   n = read(port->control, &c, sizeof(c));
--  if(n < 0) perror("Reading request");
--  else if(n == 0) printf("Disconnect\n");
--  else printf("Bad request\n");  
-+  if(n < 0) 
-+    perror("Reading request");
-+  else if(n == 0) 
-+    printf("Disconnect\n");
-+  else 
-+    printf("Bad request\n");  
- }
- 
- int handle_port(int fd)
-@@ -252,4 +246,3 @@ int handle_port(int fd)
-   }
-   return(1);
- }
--
-diff -rupN tools-original/uml_router/port.h tools/uml_router/port.h
---- tools-original/uml_router/port.h	2002-04-10 22:08:09.000000000 +0200
-+++ tools/uml_router/port.h	2009-05-01 23:31:20.717552166 +0200
+diff -Naur tools-20070815//uml_switch/port.h build/uml_switch/port.h
+--- tools-20070815//uml_switch/port.h	2002-04-10 15:07:02.000000000 +0200
++++ build/uml_switch/port.h	2011-05-20 22:18:28.488885002 +0200
 @@ -8,12 +8,32 @@
  #include <sys/socket.h>
  #include <sys/un.h>
@@ -463,9 +430,9 @@ diff -rupN tools-original/uml_router/port.h tools/uml_router/port.h
  extern void handle_tap_data(int fd, int hub);
  extern void handle_sock_data(int fd, int hub);
  
-diff -rupN tools-original/uml_router/tuntap.c tools/uml_router/tuntap.c
---- tools-original/uml_router/tuntap.c	2002-04-27 19:02:16.000000000 +0200
-+++ tools/uml_router/tuntap.c	2009-05-01 23:31:21.088773438 +0200
+diff -Naur tools-20070815//uml_switch/tuntap.c build/uml_switch/tuntap.c
+--- tools-20070815//uml_switch/tuntap.c	2002-04-24 02:13:30.000000000 +0200
++++ build/uml_switch/tuntap.c	2011-05-20 22:19:06.076885001 +0200
 @@ -6,6 +6,7 @@
  #include <sys/ioctl.h>
  #include <net/if.h>
@@ -474,18 +441,18 @@ diff -rupN tools-original/uml_router/tuntap.c tools/uml_router/tuntap.c
  #include "port.h"
  
  static void send_tap(int fd, void *packet, int len, void *unused)
-@@ -35,7 +36,7 @@ int open_tap(char *dev)
+@@ -35,7 +36,7 @@
      close(fd);
      return(-1);
    }
 -  err = setup_port(fd, send_tap, NULL, 0);
-+  err = setup_port(fd, send_tap, NULL, 0, 0);
++  err = setup_port(fd, send_tap, NULL, 0,0);
    if(err) return(err);
    return(fd);
  }
-diff -rupN tools-original/uml_router/uml_switch.c tools/uml_router/uml_switch.c
---- tools-original/uml_router/uml_switch.c	2003-09-03 22:16:32.000000000 +0200
-+++ tools/uml_router/uml_switch.c	2009-05-01 23:31:21.665168486 +0200
+diff -Naur tools-20070815//uml_switch/uml_switch.c build/uml_switch/uml_switch.c
+--- tools-20070815//uml_switch/uml_switch.c	2006-02-27 22:02:36.000000000 +0100
++++ build/uml_switch/uml_switch.c	2011-05-20 22:22:05.540885002 +0200
 @@ -7,9 +7,7 @@
  #include <stdlib.h>
  #include <signal.h>
@@ -504,11 +471,10 @@ diff -rupN tools-original/uml_router/uml_switch.c tools/uml_router/uml_switch.c
  
  #ifdef notdef
  #include <stddef.h>
-@@ -26,58 +25,6 @@
- 
+@@ -27,57 +26,6 @@
  static int hub = 0;
  static int compat_v0 = 0;
--
+ 
 -enum request_type { REQ_NEW_CONTROL };
 -
 -struct request_v0 {
@@ -563,7 +529,7 @@ diff -rupN tools-original/uml_router/uml_switch.c tools/uml_router/uml_switch.c
  static char *ctl_socket = "/tmp/uml.ctl";
  
  static char *data_socket = NULL;
-@@ -149,7 +96,11 @@ static void new_port_v0(int fd, struct r
+@@ -149,7 +97,11 @@
  {
    switch(req->type){
    case REQ_NEW_CONTROL:
@@ -576,7 +542,7 @@ diff -rupN tools-original/uml_router/uml_switch.c tools/uml_router/uml_switch.c
      break;
    default:
      printf("Bad request type : %d\n", req->type);
-@@ -164,7 +115,8 @@ static void new_port_v1_v3(int fd, enum 
+@@ -164,7 +116,8 @@
  
    switch(type){
    case REQ_NEW_CONTROL:
@@ -586,48 +552,19 @@ diff -rupN tools-original/uml_router/uml_switch.c tools/uml_router/uml_switch.c
      if(err) return;
      n = write(fd, &data_sun, sizeof(data_sun));
      if(n != sizeof(data_sun)){
-@@ -203,14 +155,28 @@ static void new_port(int fd, int data_fd
-     return;
-   }
-   if(req.v1.magic == SWITCH_MAGIC){
--    if(req.v2.version == 2) new_port_v2(fd, &req.v2, data_fd);
-+  
-+    /* version 2*/
-+    if(req.v2.version == 2) 
-+      new_port_v2(fd, &req.v2, data_fd);
-+
-+    /* version 3 */
-     if(req.v3.version == 3) 
-       new_port_v1_v3(fd, req.v3.type, &req.v3.sock, data_fd);
-+
-+    /* version unknow */
+@@ -209,6 +162,9 @@
      else if(req.v2.version > 2) 
        fprintf(stderr, "Request for a version %d port, which this "
  	      "uml_switch doesn't support\n", req.v2.version);
-+
-+    /* version 1 */
 +    else if(req.v1.type == REQ_NEW_DUMP) 
 +      fprintf(stderr, "REQ_NEW_DUMP request for version 1, which this "
 +	      "uml_switch doesn't support\n");
      else new_port_v1_v3(fd, req.v1.type, &req.v1.u.new_control.name, data_fd);
    }
-+
-+  /* version 0*/
    else new_port_v0(fd, &req.v0, data_fd);
- }
- 
-@@ -528,6 +494,8 @@ int main(int argc, char **argv)
-     }
-     for(i = 0; i < nfds; i++){
-       if(fds[i].revents == 0) continue;
-+
-+      /* stdin */
-       if(fds[i].fd == 0){
- 	if(fds[i].revents & POLLHUP){
- 	  printf("EOF on stdin, cleaning up and exiting\n");
-diff -rupN tools-original/uml_router/uml_switch.h tools/uml_router/uml_switch.h
---- tools-original/uml_router/uml_switch.h	1970-01-01 01:00:00.000000000 +0100
-+++ tools/uml_router/uml_switch.h	2009-05-01 23:31:21.784787672 +0200
+diff -Naur tools-20070815//uml_switch/uml_switch.h build/uml_switch/uml_switch.h
+--- tools-20070815//uml_switch/uml_switch.h	1970-01-01 01:00:00.000000000 +0100
++++ build/uml_switch/uml_switch.h	2011-05-20 22:22:28.328885001 +0200
 @@ -0,0 +1,67 @@
 +/* Copyright 2008 Jeff Dike & Kartoch
 + * Licensed under the GPL
@@ -696,3 +633,4 @@ diff -rupN tools-original/uml_router/uml_switch.h tools/uml_router/uml_switch.h
 +#endif
 +
 +
+
