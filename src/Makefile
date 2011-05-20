@@ -1,4 +1,4 @@
-UML_TOOLS_DIR=uml-tools/
+UML_TOOLS_DIR=tools-20070815/
 BUILD_DIR=build/
 PATCHES_DIR=patches/
 
