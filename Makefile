@@ -31,9 +31,18 @@ pack: ../netkit-$(NK_VERSION).tar.bz2 build
 		--exclude=CVS --exclude=TODO --exclude=netkit-filesystem-F* \
 		--exclude=netkit-kernel-* --exclude=.* netkit/
 
-build: clean
-	(cd src && $(MAKE) build && cd -)
+build:
+	(cd src && $(MAKE) && cd -)
+	mkdir bin/uml_tools/
+	cp src/build/uml_switch/uml_switch bin/uml_tools/
+	cp src/build/port-helper/port-helper bin/uml_tools/
+	cp src/build/tunctl/tunctl bin/uml_tools/
+	cp src/build/mconsole/uml_mconsole bin/uml_tools/
+	cp src/build/moo/uml_mkcow bin/uml_tools/
+	cp src/build/moo/uml_moo bin/uml_tools/
+	cp src/build/uml_net/uml_net bin/uml_tools/
+	
 
 clean:
 	(cd src && $(MAKE) clean && cd -)
-
+	rm -rf bin/uml_tools/
