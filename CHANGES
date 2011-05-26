@@ -1,10 +1,11 @@
 2.9
-  - for helping developpers, sources of the uml tools are in src/ directory and
-    patches are applied during build
-  - removing previous uml tools binaries
-  - support for vdump (via uml_dump): small utility to connect wireshark or
-    tcpdump directly to a uml_switch
-  - removing obsolete goals in Makefile
+  - for developpers:
+    *  sources of the uml tools are in src/ directory and patches are 
+       applied during build
+    * removing previous uml tools binaries
+    * removing obsolete goals in Makefile
+  - support for vdump (via uml_dump): small utility to connect wireshark 
+      or tcpdump directly to a uml_switch
 
 2.8
   - uml-utilities have been recompiled with dynamic linking and with Ubuntu
