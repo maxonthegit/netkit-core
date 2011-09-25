@@ -269,27 +269,23 @@ startInetHub() {
    if [ ! -S "$1" ] || ! someOneUses "$1"; then
       # Either socket does not exist yet or it is still unused
       if [ "$USE_SUDO" = "yes" ]; then
-         # Default sudo configuration resets environment variables for security
-         # reasons (depends on the configuration in sudoers, and may happen even
-         # when using -E)
-         PRESERVE_ENV=$(env | egrep "(^NETKIT)|(^PATH=)")
-         TUNTAP_COMMAND="sudo -p \"$USER's password:\" /bin/sh -c \"eval $PRESERVE_ENV; $NETKIT_HOME/bin/manage_tuntap start $USER $2 $3 $1\""
+         TUNTAP_COMMAND="sudo -p \"$USER's password:\" $NETKIT_HOME/bin/manage_tuntap $NETKIT_HOME start $USER $2 $3 $1"
       else
-         TUNTAP_COMMAND="su -mc \"$NETKIT_HOME/bin/manage_tuntap start $USER $2 $3 $1\""
+         TUNTAP_COMMAND="su -mc \"$NETKIT_HOME/bin/manage_tuntap $NETKIT_HOME start $USER $2 $3 $1\""
       fi
       if [ -z "$BE_QUIET" ]; then
          echo "******** Starting Internet connected virtual hub ********"
          echo "   $TAP_ADDRESS (host side) - $GUEST_ADDRESS (guest side)"
          echo "********     (root privileges are required)      ********"
          run_command "$JUST_PRINT" \
-                     "$NETKIT_HOME/bin/manage_tuntap start $USER $2 $3 $1" \
+                     "$NETKIT_HOME/bin/manage_tuntap $NETKIT_HOME start $USER $2 $3 $1" \
                      "$TUNTAP_COMMAND" || \
             { echo 1>&2 "Error while configuring the tunnel."; exit 1; }
          echo "************** Abandoning root privileges ***************"
          echo
       else
          run_command "$JUST_PRINT" \
-                     "$NETKIT_HOME/bin/manage_tuntap start $USER $2 $3 $1" \
+                     "$NETKIT_HOME/bin/manage_tuntap $NETKIT_HOME start $USER $2 $3 $1" \
                      "$TUNTAP_COMMAND" >/dev/null || \
             { echo 1>&2 "Error while configuring the tunnel."; exit 1; }
       fi
