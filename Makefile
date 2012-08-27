@@ -40,8 +40,13 @@ pack: ../netkit-$(NK_VERSION).tar.bz2
 		--exclude=kill --exclude=ls --exclude=lsof --exclude=ps --exclude=wc \
 		--exclude=getopt --exclude=netkit_commands.log --exclude=stresslabgen.sh \
 		--exclude=build_tarball.sh --exclude="netkit-$(NK_VERSION).tar.bz2" --exclude=FAQ.old \
-		--exclude=CVS --exclude=TODO --exclude=netkit-filesystem-F* \
-		--exclude=netkit-kernel-* --exclude=.* netkit/
+		--exclude=CVS --exclude=TODO \
+                --exclude=netkit-filesystem-F* \
+		--exclude=netkit-kernel-* \
+                --exclude=fs \
+		--exclude=kernel \
+		--exclude=*.bz2 \
+                --exclude=.* netkit/
 
 publish: netkit-$(NK_VERSION).tar.bz2
 	cp "netkit-$(NK_VERSION).tar.bz2" CHANGES INSTALL README $(PUBLISH_DIR)
