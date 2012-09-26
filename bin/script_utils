@@ -263,7 +263,7 @@ someOneUses() {
 startInetHub() {
    local HUB_COMMAND COMPLETE_COMMAND TAP_DEVICE TUNTAP_COMMAND PRESERVE_ENV
    TAP_DEVICE="nk_tap_$USER"
-   HUB_COMMAND="$NETKIT_HOME/bin/uml_switch -tap $TAP_DEVICE -hub -unix $1 </dev/null 2>&1"
+   HUB_COMMAND="$NETKIT_HOME/bin/uml_switch -tap $TAP_DEVICE -unix $1 </dev/null 2>&1"
    COMPLETE_COMMAND="${HUB_COMMAND} | awk -v SWITCHNAME=$1 -v USER=$USERID -v CURRENTDATE=\"`date +\"%Y/%m/%d %H:%M:%S\"`\" \
                '{printf \"%s %15s %25s %s\n\", CURRENTDATE, USER, SWITCHNAME, \$0}' > ${HUB_LOG} &"
    if [ ! -S "$1" ] || ! someOneUses "$1"; then
@@ -306,7 +306,7 @@ startInetHub() {
 # This function starts a hub, if it does not exist yet
 startHub() {
    local HUB_COMMAND COMPLETE_COMMAND
-   HUB_COMMAND="$NETKIT_HOME/bin/uml_switch -hub -unix $1 </dev/null 2>&1"
+   HUB_COMMAND="$NETKIT_HOME/bin/uml_switch -unix $1 </dev/null 2>&1"
    COMPLETE_COMMAND="${HUB_COMMAND} | awk -v SWITCHNAME=$1 -v USER=$USERID -v CURRENTDATE=\"`date +\"%Y/%m/%d %H:%M:%S\"`\" \
                 '{printf \"%s %15s %25s %s\n\", CURRENTDATE, USER, SWITCHNAME, \$0}' > ${HUB_LOG} &"
    if [ ! -S "$1" ]; then
