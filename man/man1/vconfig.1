@@ -1,15 +1,15 @@
 .TH VCONFIG 1 "November 2009" "" Netkit
 .SH NAME
-vconfig \- attach network interfaces to running netkit virtual machines
+vconf \- attach network interfaces to running netkit virtual machines
 .SH SYNOPSIS
-\fBvconfig\fR [options] \fIMACHINE\-ID\fR
+\fBvconf\fR [options] \fIMACHINE\-ID\fR
 
 
 \" ########################################
 
 .SH DESCRIPTION
 
-The \fIvconfig\fR command can be used to attach network interfaces to running
+The \fIvconf\fR command can be used to attach network interfaces to running
 virtual machines ``on the fly''. The affected machine is identified by a \fBMACHINE\-ID\fR,
 which is either the PID or the name of a running virtual machine.
 
@@ -30,7 +30,7 @@ Attaching an already existing interface to a virtual machine causes an error.
 
 .PP
 
-The following options are also supported by \fIvconfig\fR.
+The following options are also supported by \fIvconf\fR.
 
 .TP
 .B
@@ -68,16 +68,16 @@ This option suppresses any kind of output, except errors and warnings.
 .TP
 .B
 --user=\fIUSERNAME\fR
-This option tells \fIvconfig\fR to only work on virtual machines owned by \fIUSERNAME\fR.
-By default, \fIvconfig\fR only allows to attach interfaces to virtual machines
-started by the current user (i.e., the one who launched \fIvconfig\fR). By using
+This option tells \fIvconf\fR to only work on virtual machines owned by \fIUSERNAME\fR.
+By default, \fIvconf\fR only allows to attach interfaces to virtual machines
+started by the current user (i.e., the one who launched \fIvconf\fR). By using
 this option it is possible to attach interfaces to someone else's virtual machines
 (this requires administrative privileges). The special user name `\fB\-\fR' is
 reserved and allows to consider all virtual machines, regardless of their owner.
 
 Consider that different users may be running virtual machines having the same
 name. Hence, using the `\fB\-\-user\fR=\fB-\fR' option when \fIMACHINE\-ID\fR
-is a virtual machine name may arise ambiguities. In such a case, \fIvconfig\fR
+is a virtual machine name may arise ambiguities. In such a case, \fIvconf\fR
 only works on the virtual machine reported by issuing the command
 .nh
 `vlist -u - \fIMACHINE\-ID\fR'.
@@ -104,14 +104,14 @@ by using this command are not shown by the \fIvlist\fR command, even
 when requesting complete details about the virtual machine.
 .br
 As a side effect of this, virtual hubs (collision domains) started by
-\fIvconfig\fR are not automatically stopped when all the connected machines are
+\fIvconf\fR are not automatically stopped when all the connected machines are
 shut down. In order to do this, you should use the \fBvclean\fR command with the
 option \fB\-H\fR (see \fBvclean\fR(1)).
 
 An important difference with respect to attaching interfaces with \fIvstart\fR (see
 \fBvstart\fR(1)) is that, when using ``\fBtap\fR'' collision domains, the
 configuration of the virtual machine is not automatically updated. In particular,
-assume that interface eth0 has been set up using \fIvconfig\fR with the following option:
+assume that interface eth0 has been set up using \fIvconf\fR with the following option:
 
 .nf
 \-\-eth0=tap,\fITAP\-ADDRESS\fR,\fIGUEST\-ADDRESS\fR
@@ -128,11 +128,11 @@ by using the following command:
 ifconfig eth0 \fIGUEST\-ADDRESS\fR up
 .fi
 
-Notice that \fIvconfig\fR does not consider the \fIGUEST\-ADDRESS\fR parameter,
+Notice that \fIvconf\fR does not consider the \fIGUEST\-ADDRESS\fR parameter,
 even if the command syntax requires it. Hence, you are free to use any IP
 address in configuring interface eth0 (provided that it is on the same (sub)network
 as \fITAP\-ADDRESS\fR). Nevertheless, it is a good rule to be coherent with the
-\fIGUEST\-ADDRESS\fR provided on the \fIvconfig\fR command line.
+\fIGUEST\-ADDRESS\fR provided on the \fIvconf\fR command line.
 
 .IP 2) 3
 A default route must be configured to point to the host side of the ``\fBtap\fR''
@@ -161,7 +161,7 @@ domain.
 All Netkit commands require that the \fBNETKIT_HOME\fR variable contains the
 name of the directory Netkit is installed in.
 
-Apart from this, \fIvconfig\fR supports no other environment variables.
+Apart from this, \fIvconf\fR supports no other environment variables.
 
 
 \" ########################################
@@ -171,7 +171,7 @@ Apart from this, \fIvconfig\fR supports no other environment variables.
 .TP
 .B
 .nf
-vconfig --eth0=A pc1
+vconf --eth0=A pc1
 .fi
 Equip virtual machine \fBpc1\fR with a new interface (\fBeth0\fR) which is attached
 to the virtual collision domain \fBA\fR.
@@ -179,7 +179,7 @@ to the virtual collision domain \fBA\fR.
 .TP
 .B
 .nf
-vconfig --eth1=tap,10.0.0.1,10.0.0.2 -u foo pc2
+vconf --eth1=tap,10.0.0.1,10.0.0.2 -u foo pc2
 .fi
 Configure a new interface (\fBeth1\fR) on virtual machine \fBpc2\fR owned
 by user \fBfoo\fR. The host side of the interface will be automatically configured
@@ -191,7 +191,7 @@ ifconfig eth1 10.0.0.2 up
 route add default gw 10.0.0.1 dev eth1
 .fi
 
-Running this example requires administrative privileges. The \fIvconfig\fR
+Running this example requires administrative privileges. The \fIvconf\fR
 command will take care of asking you for the root password if needed. For more
 information about how Netkit gains root privileges, see \fBUSE_SUDO\fR and
 \fBSETTING UP NETKIT FOR USE WITH SUDO\fR in the man page of
@@ -212,7 +212,7 @@ information about how Netkit gains root privileges, see \fBUSE_SUDO\fR and
 \" ########################################
 
 .SH AUTHOR
-\fIvconfig\fR script: Massimo Rimondini
+\fIvconf\fR script: Massimo Rimondini
 .br
 This man page: Massimo Rimondini
 
