@@ -594,13 +594,6 @@ if [ -z "$NO_HOSTHOME" ]; then
 fi
 
 
-##### Append any other user provided parameters
-if [ ! -z "$KERNEL_APPEND" ]; then
-   KERNELCMD="$KERNELCMD $KERNEL_APPEND"
-   [ -z "$BE_QUIET" ] && echo "   Other args:$KERNEL_APPEND"
-fi
-
-
 ##### Check whether virtual machine already exists
 if [ -z "$JUST_PRINT" ] && getVMinfoByName "$USERID" "$VM_NAME"; then
    echo 1>&2 "${SCRIPTNAME}: Virtual machine \"$VM_NAME\" is already running. Please"
@@ -687,6 +680,11 @@ if [ ! -z "$TERM_TYPE" ]; then
    esac
 fi
 
+##### Append any other user provided parameters
+if [ ! -z "$KERNEL_APPEND" ]; then
+   KERNELCMD="$KERNELCMD $KERNEL_APPEND"
+   [ -z "$BE_QUIET" ] && echo "   Other args:$KERNEL_APPEND"
+fi
 
 [ -z "$BE_QUIET" ] && echo
 

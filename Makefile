@@ -1,5 +1,7 @@
 # The following variables must contain relative paths
 NK_VERSION=$(shell awk '/ version [0-9]/ {print $$NF}' netkit-version)
+PUBLISH_DIR=/afs/vn.uniroma3.it/user/n/netkit/public/public_html/download/netkit/
+MANPAGES_DIR=/afs/vn.uniroma3.it/user/n/netkit/public/public_html/man/
 
 SRC_DIR=src
 UML_TOOLS_DIR=$(SRC_DIR)/tools-20070815/
@@ -44,10 +46,20 @@ pack: ../netkit-$(NK_VERSION).tar.bz2 build
 	cp $(UML_TOOLS_BUILD_DIR)/uml_dump/uml_dump $(UML_TOOLS_BIN_DIR)
 	cd bin; ln -s lstart lrestart; ln -s lstart ltest; find uml_tools -mindepth 1 -maxdepth 1 -type f -exec ln -s {} ';'
 	mkdir -p $(NETKIT_BUILD_DIR)
-	tar -C .. --owner=0 --group=0 -cjf "../netkit-$(NK_VERSION).tar.bz2" --exclude=.git \
-	        --exclude=Makefile --exclude=fs --exclude=kernel --exclude=build \
-		--exclude=build_tarball.sh --exclude="netkit-$(NK_VERSION).tar.bz2" \
-	        --transform 's/netkit-core/netkit/' netkit-core/
+	tar -C .. --owner=0 --group=0 -cjf "../netkit-$(NK_VERSION).tar.bz2" \
+		--exclude=DONT_PACK --exclude=Makefile --exclude=fs --exclude=kernel \
+		--exclude=awk --exclude=basename --exclude=date --exclude=dirname \
+		--exclude=find --exclude=fuser --exclude=grep --exclude=head --exclude=id \
+		--exclude=kill --exclude=ls --exclude=lsof --exclude=ps --exclude=wc \
+		--exclude=getopt --exclude=netkit_commands.log --exclude=stresslabgen.sh \
+		--exclude=build_tarball.sh --exclude="netkit-$(NK_VERSION).tar.bz2" --exclude=FAQ.old \
+		--exclude=CVS --exclude=TODO \
+                --exclude=netkit-filesystem-F* \
+		--exclude=netkit-kernel-* \
+                --exclude=fs \
+		--exclude=kernel \
+		--exclude=*.bz2 \
+                --exclude=.* netkit/
 
 build: clean
 	mkdir $(BUILD_DIR)
