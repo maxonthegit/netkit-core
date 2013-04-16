@@ -718,4 +718,6 @@ if [ "$VM_CON0" = "none" ]; then
    REDIRECT_CONSOLE=">/dev/null 2>&1"
 fi
 
+KERNELCMD="$KERNELCMD mconsole=notify:$MCONSOLE_DIR/notify_$VM_NAME"
+
 run_command "$JUST_PRINT" "$KERNELCMD" "{ $WAKEUP_PORTHELPER $REMOVE_FS_COMMAND $KERNELCMD; cleanHubs $HUBLIST; } $REDIRECT_CONSOLE $BACKGROUND"
