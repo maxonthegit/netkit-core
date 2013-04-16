@@ -1,0 +1,427 @@
+#!/usr/bin/perl
+use strict;
+
+my $VERSION = 2;
+
+if(@ARGV[0] eq "-r"){
+    unhumfsify();
+}
+else {
+    meta_fs(@ARGV);
+}
+
+exit 0;
+
+sub meta_fs {
+    my ($user, $group, $size) = @_;
+    if(!defined($user) || !defined($group) || !defined($size)){
+	print "Usage: $0 user group size\n";
+	exit(1);
+    }
+
+    my $save_user = $user;
+    $user !~ /^[0-9]+$/ and $user = getpwnam($user);
+    if(!defined($user)){
+	print "User '$save_user' not present in the password file\n";
+	exit(1);
+    }
+
+    my $save_group = $group;
+    $group !~ /^[0-9]+$/ and $group = getgrnam($group);
+    if(!defined($group)){
+	print "Group '$save_group' not present in the groups file\n";
+	exit(1);
+    }
+
+    my %mult = ( K => 1024, M => 1024 * 1024, G => 1024 * 1024 * 1024 );
+
+    my $sizeb = $size;
+    $sizeb =~ s/^([0-9]+)([KMG])$/$1*$mult{$2}/e;
+
+    if ($sizeb !~ /^[0-9]+$/) {
+	print "Bad filesystem size - '$size'\n";
+	exit(1);
+    }
+
+    # Do this here so we bomb out quickly if there are any problems writing
+    # the superblock file
+    open SUPER, "> superblock" || die "Couldn't open superblock : $!";
+
+    my $used = `du -sk data`;
+    chomp $used;
+    $used =~ s/^([0-9]+)\s*data$/$1*1024/e;
+
+    if($used > $sizeb){
+	print "Current disk usage greater than the requested size - " .
+	    "$used vs $sizeb\n";
+	exit(1);
+    }
+
+    my $pwd = `pwd`;
+    chomp $pwd;
+    $pwd !~ /\/$/ and $pwd .= "/";
+    chdir "data";
+
+    if(!(open FILES, "find . | ")){
+	print "Couldn't start a find in 'data' - error = $!\n";
+	exit(1);
+    }
+
+    my %links = ();
+
+    while(<FILES>){
+	my $file = $_;
+	chomp $file;
+
+	my ($mode, $uid, $gid, $dev, $links, $inode, $fsdev) = 
+	    (lstat($file))[2, 4, 5, 6, 3, 1, 0 ];
+
+	my $which = (! -l $file && -d $file ? "dir" : "file");
+
+	$mode &= 0777;
+
+	my @segments = split(/\//, $file);
+	my $last = pop @segments;
+	my $dir = join("/", @segments);
+
+	my $meta_dir = "${pwd}${which}_metadata/$dir";
+	my $meta = "$meta_dir/$last";
+
+	if($which eq "dir"){
+	    my $out = `mkdir -p "${pwd}file_metadata/$dir/$last" 2>&1`;
+	    if($? != 0){
+		print "mkdir -p '${pwd}file_metadata/$dir/$last' failed, " .
+		    "exit status = $?, output = '$out'\n";
+		exit(1);
+	    }
+	    
+	    $meta_dir = $meta;
+	    $meta .= "/metadata";
+	}
+
+	my $extra = "";
+
+	my $out = `mkdir -p "$meta_dir" 2>&1`;
+	if($? != 0){
+	    print "mkdir -p '$meta_dir' failed, exit status = $?, " .
+		"output = '$out'\n";
+	    exit(1);
+	}
+	chown $user, $group, $meta_dir;
+
+	if($links > 1){
+	    if(defined($links{"$inode $fsdev"})){
+		my $from = "${pwd}${which}_metadata/$file";
+		my $to = "${pwd}${which}_metadata/" . $links{"$inode $fsdev"};
+		!link $to, $from and 
+		    warn "linking '$from' to '$to' failed - $!";
+		next;
+	    }
+	    else {
+		$links{"$inode $fsdev"} = $file;
+	    }
+	}
+
+	if(-c $file || -b $file){
+	    my $major = $dev >> 8;
+	    my $minor = $dev % 0x100;
+	    $extra = (-c $file) ? " c" : " b";
+	    $extra .= " $major $minor";
+	}
+
+	! -l $file and chmod 0755, $file;
+	chown_file($file, $user, $group);
+
+	open META, ">$meta" or die "Can't open metadata file '$meta': $!";
+	print META "$mode $uid $gid$extra\n";
+	close META;
+	chown $user, $group, $meta;
+    }
+
+    chdir $pwd;
+
+    my $out = `find file_metadata -type d | xargs chown $user.$group 2>&1`;
+    if($? != 0){
+	print "'find file_metadata -type d | xargs chown $user.$group' " .
+	    "failed, exit status = $?, output = '$out'\n";
+	exit(1);
+    }
+
+    print SUPER <<EOF;
+version $VERSION
+metadata shadow_fs
+used $used
+total $sizeb
+EOF
+    close SUPER;
+
+    chown $user, $group, "superblock";
+}
+
+sub unhumfsify {
+    open SUPER, "< superblock" || die "Couldn't open superblock : $!";
+
+    my ($version, $used, $total, $metadata);
+    while(<SUPER>){
+	my $line = $_;
+	if($line =~ /^version\s+([0-9]+)$/){
+	    $version = $1;
+	}
+	elsif($line =~ /used\s+([0-9]+)$/){
+	    $used = $1;
+	}
+	elsif($line =~ /total\s+([0-9]+)$/){
+	    $total = $1;
+	}
+	elsif($line =~ /metadata\s+([\w-]+)$/){
+	    $metadata = $1;
+	}
+    }
+
+    ($version == 1) && !defined($metadata) and $metadata = "shadow_fs";
+
+    !defined($version) and die "Bogus superblock - version not defined";
+    !defined($metadata) and die "Bogus superblock - metadata not defined";
+    !defined($used) and die "Bogus superblock - used not defined";
+    !defined($total) and die "Bogus superblock - total not defined";
+
+    $used > $total and die "Bogus superblock - used > total";
+
+    if($version == 1){
+	$metadata ne "shadow_fs" and 
+	    die "Metadata format '$metadata' isn't supported by version 1";
+	unhumfsify_shadow_fs_v1();
+    }
+    elsif($version == 2){
+	$metadata ne "shadow_fs" and 
+	    die "Metadata format '$metadata' isn't supported by version 2";
+	unhumfsify_shadow_fs_v2();
+    }
+    else {
+	die "Unsupported version - $version";
+    }
+}
+
+sub validate_number {
+    my $number = shift;
+    my $name = shift;
+    my $file = shift;
+
+    $number =~ /[0-9]+/ and return(0);
+
+    warn "Bogus $name ('$number') in $file";
+    return(1);
+}
+
+sub unhumfsify_shadow_fs_v1 {
+    my $problems = 0;
+    my $pwd = `pwd`;
+    chomp $pwd;
+    $pwd !~ /\/$/ and $pwd .= "/";
+    chdir "metadata";
+
+    if(!(open FILES, "find . | ")){
+	print "Couldn't start a find in 'data' - error = $!\n";
+	exit(1);
+    }
+
+    while(<FILES>){
+	my $bad = 0;
+	my $file = $_;
+	chomp $file;
+
+	$file =~ /\/metadata$/ and next;
+
+	my $meta = "${pwd}metadata/$file";
+	if(-d $file){
+	    $meta .= "/metadata";
+	}
+
+	open META, "<$meta" or die "Can't open metadata file '$meta': $!";
+	my @fields = split(" ", <META>);
+	my ($uid, $gid, $major, $type, $major, $minor) = @fields;
+	close META;
+
+	$bad += validate_number($uid, "uid", $meta);
+	$bad += validate_number($gid, "gid", $meta);
+
+	if(($type eq "c") || ($type eq "b")){
+	    $bad += validate_number($major, "major", $meta);
+	    $bad += validate_number($minor, "minor", $meta);
+	}
+	elsif(defined($type) && ($type ne "s")){
+	    warn "Bogus file type ('$type') in '$meta'";
+	    $bad++;
+	}
+
+	$problems += $bad;
+	$bad != 0 and next;
+
+	my $data = "${pwd}/data/$file";
+	if(($type eq "c") || ($type eq "b")){
+	    if(!unlink $data){
+		warn "Couldn't delete '$data' - $!";
+		$problems++;
+	    }
+
+	    my $out = `mknod $data $type $major $minor 2>&1`;
+	    if($? != 0){
+		warn "Couldn't 'mknod $data $type $major $minor' - " . 
+		    "exit status = $?, output = '$out'\n";
+		$problems++;
+	    }
+	}
+	elsif($type eq "s"){
+	    warn "Can't make Unix socket '$data' from perl";
+	    $problems++;
+	}
+	else {
+	    my $out = `chown -h $uid.$gid $data 2>&1`;
+	    if($? != 0){
+		warn "Couldn't chown '$data' to $uid, $gid - " . 
+		    "exit status $?, output - '$out'";
+		$problems++;
+	    }
+	}
+    }
+
+    if($problems != 0){
+	print <<EOF;
+There were some errors when copying metadata information.  Not removing the
+metadata directory.  Remove it yourself after either fixing the errors above
+or deciding that they don\'t matter.
+EOF
+    }
+    else {
+	chdir "..";
+	my $out = `rm -rf metadata 2>&1`;
+	$? != 0 and 
+	    die "Couldn't remove the metadata directory - " .
+	        "exit status of rm = $?, output = '$out'";
+    }
+}
+
+sub chown_file {
+    my $file = shift;
+    my $uid = shift;
+    my $gid = shift;
+
+    my $out = `chown -h $uid.$gid $file 2>&1`;
+    if($? != 0){
+	warn "Couldn't chown '$file' to $uid, $gid - exit status $?, " .
+	    "output - '$out'";
+	return(1);
+    }
+
+    return(0);
+}
+
+sub unhumfsify_shadow_fs_v2 {
+    my $problems = 0;
+    my $pwd = `pwd`;
+    chomp $pwd;
+    $pwd !~ /\/$/ and $pwd .= "/";
+    chdir "dir_metadata";
+
+    if(!(open FILES, "find . \! -type d | ")){
+	print "Couldn't start a find in 'data' - error = $!\n";
+	exit(1);
+    }
+
+    while(<FILES>){
+	my $bad = 0;
+	my $file = $_;
+	chomp $file;
+
+	open META, "<$file" or die "Can't open metadata file '$file': $!";
+	my @fields = split(" ", <META>);
+	my ($mode, $uid, $gid) = @fields;
+	close META;
+
+	$bad += validate_number($mode, "mode", $file);
+	$bad += validate_number($uid, "uid", $file);
+	$bad += validate_number($gid, "gid", $file);
+
+	$problems += $bad;
+	$bad != 0 and next;
+
+	my $data = `dirname ${pwd}/data/$file`;
+	chomp $data;
+
+	$problems += chown_file($data, $uid, $gid);
+	$problems += chmod $data, $mode;
+    }
+
+
+    chdir "../file_metadata";
+    if(!(open FILES, "find . \! -type d | ")){
+	print "Couldn't start a find in 'data' - error = $!\n";
+	exit(1);
+    }
+
+    while(<FILES>){
+	my $bad = 0;
+	my $file = $_;
+	chomp $file;
+
+	my $meta = "${pwd}file_metadata/$file";
+
+	open META, "<$meta" or die "Can't open metadata file '$meta': $!";
+	my @fields = split(" ", <META>);
+	my ($mode, $uid, $gid, $type, $major, $minor) = @fields;
+	close META;
+
+	$bad += validate_number($mode, "mode", $meta);
+	$bad += validate_number($uid, "uid", $meta);
+	$bad += validate_number($gid, "gid", $meta);
+	
+	if(($type eq "c") || ($type eq "b")){
+	    $bad += validate_number($major, "major", $meta);
+	    $bad += validate_number($minor, "minor", $meta);
+	}
+	elsif(defined($type) && ($type ne "s")){
+	    warn "Bogus file type ('$type') in '$meta'";
+	    $bad++;
+	}
+
+	$problems += $bad;
+	$bad != 0 and next;
+
+	my $data = "${pwd}/data/$file";
+	if(($type eq "c") || ($type eq "b")){
+	    if(!unlink $data){
+		warn "Couldn't delete '$data' - $!";
+		$problems++;
+	    }
+
+	    my $out = `mknod $data $type $major $minor 2>&1`;
+	    if($? != 0){
+		warn "Couldn't 'mknod $data $type $major $minor' - " . 
+		    "exit status = $?, output = '$out'\n";
+		$problems++;
+	    }
+	}
+	elsif($type eq "s"){
+	    warn "Can't make Unix socket '$data' from perl";
+	    $problems++;
+	}
+
+	$problems += chown_file($data, $uid, $gid);
+	! -l $data and chmod $mode, $data;
+    }
+    
+    if($problems != 0){
+	print <<EOF;
+There were some errors when copying metadata information.  Not removing the
+metadata directories.  Remove them yourself after either fixing the errors above
+or deciding that they don\'t matter.
+EOF
+    }
+    else {
+	chdir "..";
+	my $out = `rm -rf file_metadata dir_metadata 2>&1`;
+	$? != 0 and 
+	    die "Couldn't remove the metadata directories - " .
+	        "exit status of rm = $?, output = '$out'";
+    }
+}

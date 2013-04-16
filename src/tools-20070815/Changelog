@@ -1,0 +1,32 @@
+BB -
+	shebangs added where needed
+	fixed the command line handling in honeypot.pl
+	the jail Makefile installs things now
+	jail_uml handles user names as well as uids and sets its group
+	CFLAGS is now settable at the top level
+	cleanups in uml_mconsole
+	64-bit fixes, fixing of broken 64-bit COW files, and other
+cleanups in uml_moo
+	bug fix in uml_net's handling of a SLIP interface going down
+	moved the uml_router directory to uml_switch
+	cleanups in uml_switch
+	added a spec file
+
+Me -
+	BB's tarball contained a tools-$DATE with a tools subdirectory - the
+	subdirectory had newer stuff, so I started with that.
+
+	Cleaned up the honeypot.pl changes
+
+	Spurious tab in jail/Makefile
+
+	Ignored BB's redeclaration of jailtest main - I prefer correct
+declarations even when the arguments aren't used.
+
+	Removed uml_util.spec, which is generated
+
+	Added a lib directory which contains send_fd()
+
+	Added umlfs and umlfs support to uml_mconsole
+
+From dgraves - mconsole int

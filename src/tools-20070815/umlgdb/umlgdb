@@ -1,0 +1,346 @@
+#!/usr/bin/expect
+
+#######################################################################
+# Name: umlgdl
+#
+# Description:
+# umlgdb is a expect shell for gdb, which is specialised
+# to handle re-loading symbols of kernel modules as they
+# are reloaded using rmmod and insmod.
+#
+# It spawns GDB and prints out its pid which should be 
+# be used to start the UML session as follows.
+#
+# ./linux <kernel switches> debug gdb-pid=<pid>
+#
+# Once the kernel starts booting, proceed with the gdb and enter 'att 1'
+# to attach to the kernel and 'c' to continue.
+#
+# When any module is loaded with an insmod <module> command,
+# gdb breaks automatically at sys_init_module
+# and executes the appropriate gdb commands to reload all the symbols 
+# for the kernel and the symbols for the recently laoded module.
+#
+# It then passes control to the user who can proceed with their debugging
+# as usual.
+#
+# umlgdb session is very much like a session started with the normal gdb
+# except for the special handling of breakpoints at sys_init_modle.
+#
+# Its very easy to extend the behaviour opf umlgdb to handle different
+# debugging situations that need automation.
+#
+# Author: Chandan Kudige, April 11, 2002
+#######################################################################
+
+#######################################################################
+# Customisation: most of the defaults here should suffice. But feel
+#  free to change anything to suit custom requirements.
+#######################################################################
+
+##
+# GDB program name
+##
+set PROG "gdb"
+
+##
+# Kernel path relative to current directory.
+##
+set ARG "./linux"
+
+##
+# GDB prompt - Anyway valid TCL regex. Defaults to '(gdb)'
+##
+set GDB {\(gdb\)}
+
+##
+# Regex pattern printed out by the gdb when 'sys_init_module' 
+# breakpoint is hit.
+# The name of the module is matched by the regex.
+##
+set RE_BREAKPOINT {Breakpoint 1, sys_init_module \(name_user=[x0-9a-f]+ "(.+)"}
+
+##
+# Special character for quitting the UML session.
+# Type the actual character (using your editor's escape)
+##
+set QUIT_CHAR ""
+
+###
+# Module paths:
+# You can add paths for modules that are not in the gdb load-path.
+# This is basically a list with alternating module name and module path.
+# 
+# When a module is loaded, umlgdb tries to load the symbols from the
+# path given here. If the module is not listed then no symbols are loaded.
+###
+
+set MODULE_PATHS {
+"hostfs" "/home/jdike/linux/2.4/um/arch/um/fs/hostfs/hostfs.o"
+}
+
+
+#######################################################################
+# Script starts here.
+#######################################################################
+
+log_user 0
+system stty -echo raw
+set timeout -1
+
+proc get_module_path {modname} {
+    global MODULE_PATHS ARG env
+
+    set idx [lsearch $MODULE_PATHS $modname]
+    if {$idx == -1} {
+	set version "[exec ./linux --version]"
+	set path "[exec find $env(PWD)/lib/modules/$version/ -name ${modname}.o ]"
+	if {$path != ""} {
+	    return $path
+	}
+        return 0
+    }
+
+    incr idx
+
+    return [lindex $MODULE_PATHS $idx]
+}
+
+#######################################################################
+# do_insmod() hook is invoked when umlgdb detects that the breakpoint
+# at sys_init_module has been hit.
+#
+# Args:
+#   name - name of the module being loaded
+#
+# Returns: None
+#######################################################################
+
+proc do_insmod {name} {
+    global GDB ARG
+
+    set timeout 5
+
+    ##
+    # Let the sys_init_module return
+    # since module_list struct is initialised in this routine.
+    ##
+    prompt_wait $GDB
+    send "finish\r"
+    prompt_wait $GDB
+
+    ##
+    # find the start address of the module.
+    ##
+    set tmp "p/x (int)module_list + module_list->size_of_struct\r"
+    send $tmp
+
+    ##
+    # gdb prints the expression values as
+    # $<num> = 0x<hex value>
+    # Capture the hex value into modstart
+    ##
+    set buf [prompt_wait {= (0x[0-9a-f]+)}]
+    set succ [regexp "= (.+)" $buf tmp modstart]
+
+    set modpath [get_module_path $name]
+
+    ##
+    # Reload symbols only if we have a module path
+    ##
+
+    if {$modpath != 0} {
+        ##
+        # Reload all kernel symbols
+        ##
+        prompt_wait $GDB
+        send "symbol-file $ARG\r"
+        prompt_wait "y or n"
+        send "y\r"
+
+        ##
+        # Load the symbols for our module
+        ##
+        prompt_wait $GDB
+
+
+        send "add-symbol-file $modpath $modstart\r"
+        prompt_wait "y or n"
+        send "y\r"
+
+        ##
+        # print the module_list head to make sure init() and cleanup()
+        # are valid addresses
+        ##
+        prompt_wait $GDB
+        send "p *module_list\r"
+        prompt_wait $GDB
+        puts "\r\r>> Finished loading symbols for $name ...\r"
+
+        send " \r"
+    }
+
+    prompt_wait $GDB
+
+    ##
+    # Back to user
+    ##
+    set timeout -1
+}
+
+#######################################################################
+# shell() is the main dispatch loop.
+# 
+# - Passes user 
+#
+# Args:
+#   name - name of the module being loaded
+#
+# Returns: None
+#######################################################################
+
+proc shell {} {
+    global spawn_id, user_spawn_id
+    global RE_BREAKPOINT
+    global QUIT_CHAR
+
+    while 1 {
+    	expect {
+            ##
+            # gracefully exit when the gdb exits.
+            ##
+            eof {
+                return
+                }
+            
+            ##
+            # Hooks for gdb output.
+            # Note: order is important
+            ##
+            -re     $RE_BREAKPOINT {
+                    set modname $expect_out(1,string);
+                    set bpline $expect_out(buffer); 
+
+                    puts "\r *** Module $modname loaded *** \r"
+                    send_user -raw  -- $bpline
+                    do_insmod $modname
+               }
+
+            ##
+            # Catch all from gdb and pass it to the user
+            ##
+            -re ".+" {
+                    send_user -raw -- $expect_out(buffer);
+               }
+
+            ##
+            # Catch user QUIT sequence.
+            # Currently should be a single character.
+            ##
+	    	-i $user_spawn_id $QUIT_CHAR {return}
+
+            ##
+            # Catch all from user and pass it to gdb
+            ##
+            -i $user_spawn_id -re .+ {
+                    send -- $expect_out(buffer); 
+               }
+
+        }
+	}
+}
+
+#######################################################################
+# prompt_wait() : Can be called anytime we wait for a prompt.
+# Respects user input while waiting for the prompt.
+#######################################################################
+
+proc prompt_wait {prompt} {
+    global user_spawn_id
+    global QUIT_CHAR
+
+    set buf "<none>"
+
+    expect {
+        -re $prompt {
+                set buf $expect_out(buffer);
+                send_user -raw -- $buf
+            }
+
+        -re ".+" {
+                set buf $expect_out(buffer);
+                send_user -raw -- $buf
+                exp_continue;
+            }
+
+           timeout {
+                puts "\rTIMEDOUT on prompt $prompt!!!\r"
+                return 0;
+            }
+
+	    	-i $user_spawn_id $QUIT_CHAR {return}
+            -i $user_spawn_id -re .+ {
+                    send -- $expect_out(buffer); 
+            }
+    }
+
+    return $buf
+}
+
+##
+# Setup a breakpoint at sys_init_module
+# Prepare to enter "att 1"
+##
+proc initgdb {pid} {
+    global GDB
+
+##
+# user can press the 'enter' once they start the UML kernel.
+##
+
+    prompt_wait $GDB
+    send "att 1"
+
+    prompt_wait $GDB
+    send "b sys_init_module\r"
+
+    prompt_wait $GDB
+    send "b panic\r"
+
+    prompt_wait $GDB
+    send "b stop\r"
+
+    prompt_wait $GDB
+    send "handle SIGWINCH nostop noprint pass\r"
+
+    prompt_wait $GDB
+    send "b start_kernel\r"
+
+    prompt_wait $GDB
+    send "c\r"
+}
+
+##
+# Spawn our gdb with linux
+##
+set pid [spawn $PROG $ARG]
+
+puts "\r\n\n            ******** GDB pid is $pid ********\r"
+puts "Start UML as: $ARG <kernel switches> debug gdb-pid=$pid\r\n\r\n\r\n"
+
+##
+# Initialise gdb
+##
+initgdb $pid
+
+##
+# Main dispatch loop
+##
+shell
+
+##
+# Cleanup
+##
+system stty sane
+
+puts "\r----- umlgdb finished----\r"

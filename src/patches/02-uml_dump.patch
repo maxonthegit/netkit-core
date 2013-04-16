@@ -1,0 +1,636 @@
+diff -Naur tools-20070815//Makefile build/Makefile
+--- tools-20070815//Makefile	2006-02-27 20:38:55.000000000 +0100
++++ build/Makefile	2011-05-20 22:12:26.944885002 +0200
+@@ -1,7 +1,7 @@
+ TUNCTL = $(shell [ -e /usr/include/linux/if_tun.h ] && echo tunctl)
+ 
+ SUBDIRS = lib jail jailtest humfsify mconsole moo port-helper $(TUNCTL) \
+-	uml_net uml_switch watchdog umlfs
++	uml_net uml_switch watchdog umlfs uml_dump
+ UMLVER = $(shell date +%Y%m%d)
+ TARBALL = uml_utilities_$(UMLVER).tar.bz2
+ BIN_DIR = /usr/bin
+diff -Naur tools-20070815//uml_dump/Makefile build/uml_dump/Makefile
+--- tools-20070815//uml_dump/Makefile	1970-01-01 01:00:00.000000000 +0100
++++ build/uml_dump/Makefile	2011-05-20 22:13:52.916885002 +0200
+@@ -0,0 +1,17 @@
++OBJS = uml_dump.o
++BIN = uml_dump
++CFLAGS = -g -Wall
++
++BIN_DIR ?= /usr/bin
++
++all : $(BIN)
++
++$(BIN) : $(OBJS)
++	$(CC) $(CFLAGS) -o $(BIN) $(OBJS)
++
++clean : 
++	rm -f $(BIN) $(OBJS) *~
++
++install : $(BIN)
++	install -d $(DESTDIR)$(BIN_DIR)
++	install -s $(BIN) $(DESTDIR)$(BIN_DIR)
+diff -Naur tools-20070815//uml_dump/uml_dump.c build/uml_dump/uml_dump.c
+--- tools-20070815//uml_dump/uml_dump.c	1970-01-01 01:00:00.000000000 +0100
++++ build/uml_dump/uml_dump.c	2011-05-20 22:25:25.188885000 +0200
+@@ -0,0 +1,276 @@
++/*
++ * Copyright 2008 
++ * Authors:
++ *   - Julien Iguchi-Cartigny
++ *   - Jean-Baptiste Machemie
++ *   - Benoit Bitarelle
++ * Licensed under the GPL
++ *
++ * TODO: receive packets from multiple uml switchs
++ *
++ */
++
++#include <stdlib.h>
++#include <stdio.h>
++#include <fcntl.h>
++#include <errno.h>
++#include <sys/socket.h>
++#include <sys/poll.h>
++#include <sys/time.h>
++#include <sys/un.h>
++#include <unistd.h>
++#include <signal.h>
++#include <stdio.h>
++
++#include "../uml_switch/switch.h"
++#include "../uml_switch/uml_switch.h"
++#include "../uml_switch/port.h"
++
++/***************** PCAP Part *****************/
++
++int output_fd;
++
++unsigned char pcap_file_header[] = {
++  0xd4, 0xc3, 0xb2, 0Xa1, // magic number
++  0x02, 0x00, 0x04, 0x00, // major and minor version number: 2.4
++  0x00, 0x00, 0x00, 0x00, // thiszone: GMT
++  0x00, 0x00, 0x00, 0x00, // accuracy: 0
++  0xEA, 0x05, 0x00, 0x00, // max length of captured packet: 1514
++  0x01, 0x00, 0x00, 0x00  // data link type: ethernet
++};
++
++unsigned int pcap_packet_header[] = {
++  0, // timestamp second
++  0, // timestamp microsecond
++  0, // number of octets of packet saved in file
++  0  // actual length of packet
++};
++
++struct timeval tv;
++
++void dump_packet(struct packet *packet, int size) {
++
++  int w;
++
++  gettimeofday(&tv, (void*)0);
++
++  pcap_packet_header[0] = tv.tv_sec;
++  pcap_packet_header[1] = tv.tv_usec;
++  pcap_packet_header[2] = size;
++  pcap_packet_header[3] = size;
++
++  w = fwrite(pcap_packet_header, sizeof(unsigned char), 
++             sizeof(pcap_packet_header), stdout);
++
++  if(w<=0)
++    perror("error when writing packet header to stdout");
++  
++  w = fwrite((unsigned char*)packet, sizeof(unsigned char), size, stdout);
++
++  if(w<=0)
++    perror("error when writing packet data to stdout");
++
++  w = fflush(stdout);
++
++  if(w!=0)
++    perror("error flushing stdout");
++}
++
++/***************** UML Part *****************/
++
++static char *prog;
++
++static char *ctl_socket = "/tmp/uml.ctl";
++
++int connect_fd, data_out_fd, data_in_fd;
++
++void cleanup() {
++  close(connect_fd);
++  close(data_out_fd);
++}
++
++static void sig_handler(int sig)
++{
++  fprintf(stderr,"Caught signal %d, cleaning up and exiting\n", sig);
++  cleanup();
++  signal(sig, SIG_DFL);
++  kill(getpid(), sig);
++}
++
++static void usage(void)
++{
++  fprintf(stderr, "Usage : %s control-socket\n"
++                  "if no parameter %s is used as control socket\n", 
++                  prog, ctl_socket);
++  exit(1);
++}
++
++
++int main(int argc, char *argv[]) {
++
++  prog = argv[0];
++  argv++;
++  argc--;
++
++  /* parameter -help */
++  if(argc == 1) {
++
++    if(!strcmp(argv[0], "-help")){
++        usage();
++    }
++
++    ctl_socket = argv[0];
++  }
++
++  if(argc > 1) {
++    usage();
++  }
++
++  /* ask for the data in socket */
++  if((data_in_fd = socket(PF_UNIX, SOCK_DGRAM, 0)) < 0){
++    perror("socket");
++    exit(1);
++  }
++
++  if(fcntl(data_in_fd, F_SETFL, O_NONBLOCK) < 0){
++    perror("setting O_NONBLOCK on data in fd");
++    exit(1);
++  }
++
++  /* prepare the data in structure */
++  struct sockaddr_un data_in_sun;  
++
++  struct {
++    char zero;
++    int pid;
++    int usecs;
++  } name;
++
++  struct timeval tv;
++
++  name.zero = 0;
++  name.pid = getpid();
++  gettimeofday(&tv, NULL);
++  name.usecs = tv.tv_usec;
++ 
++  data_in_sun.sun_family = AF_UNIX;
++  memcpy(data_in_sun.sun_path, &name, sizeof(name));
++
++  /* bind data_in_socket */
++  if(bind(data_in_fd, (struct sockaddr*) &data_in_sun, 
++          sizeof(data_in_sun)) < 0){
++    perror("binding to data in socket");
++    exit(1);
++  }
++
++  /* ask for the connect socket */
++  if((connect_fd = socket(PF_UNIX, SOCK_STREAM, 0)) < 0){
++    perror("socket connect");
++    exit(1);
++  }
++
++  /* start the connect socket */
++  struct sockaddr_un connect_sun;
++
++  connect_sun.sun_family = AF_UNIX;
++  strncpy(connect_sun.sun_path, ctl_socket, sizeof(connect_sun.sun_path));
++
++  if(connect(connect_fd, (struct sockaddr *)&connect_sun, 
++             sizeof(connect_sun)) < 0){
++    perror("connect connect");
++    fprintf(stderr,"check the path to control socket: %s\n", ctl_socket);
++    exit(1);
++  }
++
++  /* prepare the request */
++  struct request_v3 request;
++  request.magic = 0xfeedface;
++  request.version = 3;
++  request.type = REQ_NEW_DUMP;
++  request.sock = data_in_sun;
++
++  int n;
++
++  /* send the request */
++  n = send(connect_fd, &request, sizeof(request), 0);
++
++  if(n < sizeof(request)) {
++    fprintf(stderr,"not enough byte sent or error: %d\n", n);
++    exit(1);
++  }
++
++  /* receive the data out socket addr (we don't really care about it) */
++  struct sockaddr_un data_out_sun;
++
++  n = recv(connect_fd, &data_out_sun, sizeof(data_out_sun), 0); 
++
++  if(n < sizeof(data_out_sun)) {
++    fprintf(stderr,"not enough byte received or error: %d\n", n);
++    exit(1);
++  }
++
++  /* prepare the pool */
++  struct pollfd p[2];
++
++  p[0].fd = connect_fd;
++  p[0].events = POLLIN;
++  p[1].fd = data_in_fd;
++  p[1].events = POLLIN;
++
++  /* setup the signal handler for CTRL-C */
++  if(signal(SIGINT, sig_handler) < 0)
++    perror("Setting handler for SIGINT");
++
++  /* setup the signal handler for closed pipe by reader */
++  if(signal(SIGPIPE, sig_handler) < 0)
++    perror("Setting handler for SIGPIPE");
++
++ /* writing pcap header to stdout */
++  int w = fwrite(pcap_file_header, sizeof(unsigned char), 
++                 sizeof(pcap_file_header), stdout);
++
++  if(w<=0)
++    perror("error when writing cap header to stdout");
++
++  struct packet packet;
++
++  /* the main loop */
++  while(1) {
++
++    /* waiting */
++    n = poll(p, 2, -1);
++
++    if(n < 0){
++      if(errno == EINTR) continue; /* if poll stop by a signal */
++      perror("poll");
++      break;
++    }
++
++    /* check control socket */
++    if(p[0].revents) {
++      if(p[0].revents & POLLHUP){
++	fprintf(stderr,"uml_switch disconnected\n");
++	break;
++      } else {
++        fprintf(stderr,"control packet in excess ?\n");
++        exit(1);
++      }
++    }
++
++    /* check data out socket */
++    if(p[1].revents) {
++
++      n = recv(data_in_fd, &packet, sizeof(packet), 0); 
++      if(n < 0 && errno != EAGAIN) {
++        perror("recv data out socket\n");
++        exit(1);
++      }
++
++      dump_packet(&packet,n);
++    }
++  }
++
++  cleanup();
++
++  return 0;
++}
+diff -Naur tools-20070815//uml_switch/port.c build/uml_switch/port.c
+--- tools-20070815//uml_switch/port.c	2006-02-27 22:02:45.000000000 +0100
++++ build/uml_switch/port.c	2011-05-20 22:17:31.188885002 +0200
+@@ -8,25 +8,6 @@
+ #include "hash.h"
+ #include "port.h"
+ 
+-struct packet {
+-  struct {
+-    unsigned char dest[ETH_ALEN];
+-    unsigned char src[ETH_ALEN];
+-    unsigned char proto[2];
+-  } header;
+-  unsigned char data[1500];
+-};
+-
+-struct port {
+-  struct port *next;
+-  struct port *prev;
+-  int control;
+-  void *data;
+-  int data_len;
+-  unsigned char src[ETH_ALEN];
+-  void (*sender)(int fd, void *packet, int len, void *data);
+-};
+-
+ static struct port *head = NULL;
+ 
+ #define IS_BROADCAST(addr) ((addr[0] & 1) == 1)
+@@ -107,7 +88,15 @@
+       (*p->sender)(p->control, packet, len, p->data);
+     }
+   }
+-  else (*target->sender)(target->control, packet, len, target->data);
++  else {
++    /* looking for dump port */
++    for(p = head; p != NULL; p = p->next){
++      if(p == port) continue;
++      if(p->dump) 
++        (*p->sender)(p->control, packet, len, p->data);
++    }
++    (*target->sender)(target->control, packet, len, target->data);
++  }
+ }
+ 
+ static void handle_data(int fd, int hub, struct packet *packet, int len, 
+@@ -149,7 +138,7 @@
+ }
+ 
+ int setup_port(int fd, void (*sender)(int fd, void *packet, int len, 
+-				      void *data), void *data, int data_len)
++				      void *data), void *data, int data_len, int dump)
+ {
+   struct port *port;
+ 
+@@ -165,6 +154,7 @@
+   port->data = data;
+   port->data_len = data_len;
+   port->sender = sender;
++  port->dump = dump;
+   head = port;
+   printf("New connection\n");
+   return(0);
+@@ -216,7 +206,7 @@
+   handle_data(fd, hub, &packet, len, &data, match_sock);
+ }
+ 
+-int setup_sock_port(int fd, struct sockaddr_un *name, int data_fd)
++int setup_sock_port(int fd, struct sockaddr_un *name, int data_fd, int dump)
+ {
+   struct sock_data *data;
+ 
+@@ -227,7 +217,7 @@
+   }
+   *data = ((struct sock_data) { fd : 	data_fd,
+ 				sock :	*name });
+-  return(setup_port(fd, send_sock, data, sizeof(*data)));
++  return(setup_port(fd, send_sock, data, sizeof(*data), dump));
+ }
+ 
+ static void service_port(struct port *port)
+diff -Naur tools-20070815//uml_switch/port.h build/uml_switch/port.h
+--- tools-20070815//uml_switch/port.h	2002-04-10 15:07:02.000000000 +0200
++++ build/uml_switch/port.h	2011-05-20 22:18:28.488885002 +0200
+@@ -8,12 +8,32 @@
+ #include <sys/socket.h>
+ #include <sys/un.h>
+ 
++struct packet {
++  struct {
++    unsigned char dest[ETH_ALEN];
++    unsigned char src[ETH_ALEN];
++    unsigned char proto[2];
++  } header;
++  unsigned char data[1500];
++};
++
++struct port {
++  struct port *next;
++  struct port *prev;
++  int control;
++  void *data;
++  int data_len;
++  unsigned char src[ETH_ALEN];
++  void (*sender)(int fd, void *packet, int len, void *data);
++  int dump;
++};
++
+ extern int handle_port(int fd);
+ extern void close_port(int fd);
+-extern int setup_sock_port(int fd, struct sockaddr_un *name, int data_fd);
++extern int setup_sock_port(int fd, struct sockaddr_un *name, int data_fd, int dump);
+ extern int setup_port(int fd, void (*sender)(int fd, void *packet, int len, 
+ 					     void *data), void *data, 
+-		      int data_len);
++		      int data_len, int dump);
+ extern void handle_tap_data(int fd, int hub);
+ extern void handle_sock_data(int fd, int hub);
+ 
+diff -Naur tools-20070815//uml_switch/tuntap.c build/uml_switch/tuntap.c
+--- tools-20070815//uml_switch/tuntap.c	2002-04-24 02:13:30.000000000 +0200
++++ build/uml_switch/tuntap.c	2011-05-20 22:19:06.076885001 +0200
+@@ -6,6 +6,7 @@
+ #include <sys/ioctl.h>
+ #include <net/if.h>
+ #include <linux/if_tun.h>
++#include "switch.h"
+ #include "port.h"
+ 
+ static void send_tap(int fd, void *packet, int len, void *unused)
+@@ -35,7 +36,7 @@
+     close(fd);
+     return(-1);
+   }
+-  err = setup_port(fd, send_tap, NULL, 0);
++  err = setup_port(fd, send_tap, NULL, 0,0);
+   if(err) return(err);
+   return(fd);
+ }
+diff -Naur tools-20070815//uml_switch/uml_switch.c build/uml_switch/uml_switch.c
+--- tools-20070815//uml_switch/uml_switch.c	2006-02-27 22:02:36.000000000 +0100
++++ build/uml_switch/uml_switch.c	2011-05-20 22:22:05.540885002 +0200
+@@ -7,9 +7,7 @@
+ #include <stdlib.h>
+ #include <signal.h>
+ #include <fcntl.h>
+-#include <stdint.h>
+ #include <sys/socket.h>
+-#include <sys/un.h>
+ #include <sys/poll.h>
+ #include <sys/time.h>
+ #include <unistd.h>
+@@ -19,6 +17,7 @@
+ #ifdef TUNTAP
+ #include "tuntap.h"
+ #endif
++#include "uml_switch.h"
+ 
+ #ifdef notdef
+ #include <stddef.h>
+@@ -27,57 +26,6 @@
+ static int hub = 0;
+ static int compat_v0 = 0;
+ 
+-enum request_type { REQ_NEW_CONTROL };
+-
+-struct request_v0 {
+-  enum request_type type;
+-  union {
+-    struct {
+-      unsigned char addr[ETH_ALEN];
+-      struct sockaddr_un name;
+-    } new_control;
+-  } u;
+-};
+-
+-#define SWITCH_MAGIC 0xfeedface
+-
+-struct request_v1 {
+-  uint32_t magic;
+-  enum request_type type;
+-  union {
+-    struct {
+-      unsigned char addr[ETH_ALEN];
+-      struct sockaddr_un name;
+-    } new_control;
+-  } u;
+-};
+-
+-struct request_v2 {
+-  uint32_t magic;
+-  uint32_t version;
+-  enum request_type type;
+-  struct sockaddr_un sock;
+-};
+-
+-struct reply_v2 {
+-  unsigned char mac[ETH_ALEN];
+-  struct sockaddr_un sock;
+-};
+-
+-struct request_v3 {
+-  uint32_t magic;
+-  uint32_t version;
+-  enum request_type type;
+-  struct sockaddr_un sock;
+-};
+-
+-union request {
+-  struct request_v0 v0;
+-  struct request_v1 v1;
+-  struct request_v2 v2;
+-  struct request_v3 v3;
+-};
+-
+ static char *ctl_socket = "/tmp/uml.ctl";
+ 
+ static char *data_socket = NULL;
+@@ -149,7 +97,11 @@
+ {
+   switch(req->type){
+   case REQ_NEW_CONTROL:
+-    setup_sock_port(fd, &req->u.new_control.name, data_fd);
++    setup_sock_port(fd, &req->u.new_control.name, data_fd, 0);
++    break;
++  case REQ_NEW_DUMP:
++    printf("REQ_NEW_DUMP for version 0 not supported\n");
++    close_descriptor(fd);
+     break;
+   default:
+     printf("Bad request type : %d\n", req->type);
+@@ -164,7 +116,8 @@
+ 
+   switch(type){
+   case REQ_NEW_CONTROL:
+-    err = setup_sock_port(fd, sock, data_fd);
++  case REQ_NEW_DUMP:
++    err = setup_sock_port(fd, sock, data_fd, (type == REQ_NEW_DUMP));
+     if(err) return;
+     n = write(fd, &data_sun, sizeof(data_sun));
+     if(n != sizeof(data_sun)){
+@@ -209,6 +162,9 @@
+     else if(req.v2.version > 2) 
+       fprintf(stderr, "Request for a version %d port, which this "
+ 	      "uml_switch doesn't support\n", req.v2.version);
++    else if(req.v1.type == REQ_NEW_DUMP) 
++      fprintf(stderr, "REQ_NEW_DUMP request for version 1, which this "
++	      "uml_switch doesn't support\n");
+     else new_port_v1_v3(fd, req.v1.type, &req.v1.u.new_control.name, data_fd);
+   }
+   else new_port_v0(fd, &req.v0, data_fd);
+diff -Naur tools-20070815//uml_switch/uml_switch.h build/uml_switch/uml_switch.h
+--- tools-20070815//uml_switch/uml_switch.h	1970-01-01 01:00:00.000000000 +0100
++++ build/uml_switch/uml_switch.h	2011-05-20 22:22:28.328885001 +0200
+@@ -0,0 +1,67 @@
++/* Copyright 2008 Jeff Dike & Kartoch
++ * Licensed under the GPL
++ */
++
++#ifndef __UML_SWITCH_H__
++#define __UML_SWITCH_H__
++
++#include <stdint.h>
++#include <sys/un.h>
++
++enum request_type { 
++  REQ_NEW_CONTROL,
++  REQ_NEW_DUMP
++};
++
++struct request_v0 {
++  enum request_type type;
++  union {
++    struct {
++      unsigned char addr[ETH_ALEN];
++      struct sockaddr_un name;
++    } new_control;
++  } u;
++};
++
++#define SWITCH_MAGIC 0xfeedface
++
++struct request_v1 {
++  uint32_t magic;
++  enum request_type type;
++  union {
++    struct {
++      unsigned char addr[ETH_ALEN];
++      struct sockaddr_un name;
++    } new_control;
++  } u;
++};
++
++struct request_v2 {
++  uint32_t magic;
++  uint32_t version;
++  enum request_type type;
++  struct sockaddr_un sock;
++};
++
++struct reply_v2 {
++  unsigned char mac[ETH_ALEN];
++  struct sockaddr_un sock;
++};
++
++struct request_v3 {
++  uint32_t magic;
++  uint32_t version;
++  enum request_type type;
++  struct sockaddr_un sock;
++};
++
++union request {
++  struct request_v0 v0;
++  struct request_v1 v1;
++  struct request_v2 v2;
++  struct request_v3 v3;
++};
++
++#endif
++
++
+
