@@ -1,0 +1,81 @@
+#!/bin/bash
+
+DELAY=1
+
+case $1 in
+    -d)
+        shift;;
+    --help)
+        echo "usage: $0 [<lab-directory>]"
+        exit;;
+    *)
+esac
+
+
+DIR=$1
+
+if [ -z "$DIR" ]
+then
+    DIR=`pwd`
+fi
+
+cd $DIR
+
+if ! [ -e "lab.conf" ]
+then
+  echo "$DIR is not a netkit lab directory!"
+  exit
+fi
+
+CUR=`pwd`
+
+# FIXME: we should import computer names from lab.conf instead of using 'find' tool.
+# See http://dev.iu7.bmstu.ru/trac/netp_09_labs/ticket/65
+COMPS=$(find * -prune -type d )
+SESSIONS=()
+PID=`pidof -s konsole`
+
+declare -A NAMES
+for C in $COMPS
+do
+    CMD="cd $CUR && lstart -d . $C"
+    echo "starting $C ..."
+    SESSION=$(qdbus org.kde.konsole /Konsole newSession 2>/dev/null)
+    if test -z "$SESSION"
+    then
+        SPACE="org.kde.konsole-$PID"
+        SESSION=$(qdbus $SPACE /Konsole newSession 2>/dev/null)
+        if test -z "$SESSION"
+        then
+            echo "Konsole is not installed or D-bus is not working properly."
+            echo "Please run this script within a Konsole tab."
+            exit 1
+        fi
+    else
+        SPACE="org.kde.konsole"
+    fi
+    SESSIONS+=($SESSION)
+    NAMES[$SESSION]=$C
+    r=$(qdbus $SPACE /Sessions/$SESSION sendText "$CMD")
+    r=$(qdbus $SPACE /Sessions/$SESSION sendText $'\n')
+done
+
+# It is impossible to call setUserTitle method via qdbus in KDE 4.4 and
+# setTabTitleFormat is not available in KDE before 4.6.
+# Workaround is to use an infinite loop.
+# See https://bugs.kde.org/show_bug.cgi?id=262089 for details.
+
+echo 'setting tabs names (infinite loop)...'
+
+for (( ; ; ))
+do
+    for SESSION in "${SESSIONS[@]}"
+    do
+        NAME=${NAMES[$SESSION]}
+#         echo session: $SESSION, tab name: $NAME
+        # 0: local, 1: remote
+        r=$(qdbus $SPACE /Sessions/$SESSION setTitle 1 "$NAME")
+        r=$(qdbus $SPACE /Sessions/$SESSION setTitle 0 "$NAME")
+    done
+    sleep $DELAY
+done
