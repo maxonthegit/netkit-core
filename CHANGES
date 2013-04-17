@@ -3,6 +3,7 @@
   - support for connection mconsole (babazka)
   - support for vdump (via uml_dump): small utility to connect wireshark 
     or tcpdump directly to a uml_switch
+  - add Ktabstart, a tool to run netkit session within konsole tabs (sv75)
   - for developpers:
     * better looking excludes in Makefile (Markus Stenberg)
     * sources of the uml tools are in src/ directory and patches are 
