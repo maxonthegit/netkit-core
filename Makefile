@@ -27,8 +27,11 @@ check:
 	dpkg -s libreadline6-dev > /dev/null 2> /dev/null
 	@echo -e "Checking package \e[1mlibfuse2\e[0m"
 	dpkg -s libfuse2 > /dev/null 2> /dev/null
-	@echo -e "Checking package \e[1libfuse-dev\e[0m"
+	@echo -e "Checking package \e[1mlibfuse-dev\e[0m"
 	dpkg -s libfuse-dev > /dev/null 2> /dev/null
+	@echo -e "Checking \e[1mTUNTAP\e[0m include file"
+	test -e /usr/include/linux/if_tun.h
+	
 
 help:
 	@echo
