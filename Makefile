@@ -9,7 +9,7 @@ UML_TOOLS_BUILD_DIR=$(BUILD_DIR)/uml_tools/
 NETKIT_BUILD_DIR=$(BUILD_DIR)/netkit/
 UML_TOOLS_BIN_DIR=bin/uml_tools/
 
-DEBIAN_VERSION=`cat /etc/debian_version`
+DEBIAN_VERSION=`cat /etc/debian_version | cut -c 1`
 
 .PHONY: default help pack
 
@@ -17,7 +17,10 @@ default: help
 
 check:
 	@echo
-	@echo -e "Checking debian version \e[1m(6.X.X)\e[0m: $(DEBIAN_VERSION)"
+	@echo -e "Checking \e[1mdebian\e[0m"
+	cat /etc/debian_version
+	@echo -e "Checking debian version \e[1m(6.X.X)\e[0m"
+	test  $(DEBIAN_VERSION) = "6"
 	@echo -e "Checking package \e[1mlibreadline6\e[0m"
 	dpkg -s libreadline6 > /dev/null 2> /dev/null
 	@echo -e "Checking package \e[1mlibreadline6-dev\e[0m"
