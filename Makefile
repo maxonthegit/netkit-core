@@ -9,10 +9,23 @@ UML_TOOLS_BUILD_DIR=$(BUILD_DIR)/uml_tools/
 NETKIT_BUILD_DIR=$(BUILD_DIR)/netkit/
 UML_TOOLS_BIN_DIR=bin/uml_tools/
 
+DEBIAN_VERSION=`cat /etc/debian_version`
 
 .PHONY: default help pack
 
 default: help
+
+check:
+	@echo
+	@echo -e "Checking debian version \e[1m(6.X.X)\e[0m: $(DEBIAN_VERSION)"
+	@echo -e "Checking package \e[1mlibreadline6\e[0m"
+	dpkg -s libreadline6 > /dev/null 2> /dev/null
+	@echo -e "Checking package \e[1mlibreadline6-dev\e[0m"
+	dpkg -s libreadline6-dev > /dev/null 2> /dev/null
+	@echo -e "Checking package \e[1mlibfuse2\e[0m"
+	dpkg -s libfuse2 > /dev/null 2> /dev/null
+	@echo -e "Checking package \e[1libfuse-dev\e[0m"
+	dpkg -s libfuse-dev > /dev/null 2> /dev/null
 
 help:
 	@echo
@@ -45,7 +58,7 @@ package: build
 	(cd $(NETKIT_BUILD_DIR)bin &&  ln -s lstart lrestart; ln -s lstart ltest; find uml_tools -mindepth 1 -maxdepth 1 -type f -exec ln -s {} ';' && cd -)
 	tar -C $(BUILD_DIR) --owner=0 --group=0 -cjf "netkit-$(NK_VERSION).tar.bz2" netkit/
 
-build: clean
+build: clean check
 	mkdir $(BUILD_DIR)
 	cp -rf $(UML_TOOLS_DIR) $(UML_TOOLS_BUILD_DIR)
 	for PATCH in $(shell find $(PATCHES_DIR) -type f); do \
