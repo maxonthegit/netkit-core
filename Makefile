@@ -1,7 +1,5 @@
 # The following variables must contain relative paths
 NK_VERSION=$(shell awk '/ version [0-9]/ {print $$NF}' netkit-version)
-PUBLISH_DIR=/afs/vn.uniroma3.it/user/n/netkit/public/public_html/download/netkit/
-MANPAGES_DIR=/afs/vn.uniroma3.it/user/n/netkit/public/public_html/man/
 
 SRC_DIR=src
 UML_TOOLS_DIR=$(SRC_DIR)/tools-20070815/
@@ -20,7 +18,7 @@ help:
 	@echo
 	@echo -e "\e[1mAvailable targets are:\e[0m"
 	@echo
-	@echo -e "  \e[1mpack\e[0m       Create a distributable tarball of Netkit."
+	@echo -e "  \e[1mpackage\e[0m    Create a distributable tarball of Netkit."
 	@echo
 	@echo -e "  \e[1mbuild\e[0m      Patch then build the uml tools."
 	@echo
@@ -31,35 +29,21 @@ help:
 	@echo "run the corresponding Makefile in the applicable directory."
 	@echo
 
-pack: ../netkit-$(NK_VERSION).tar.bz2 build
-	mv ../netkit-$(NK_VERSION).tar.bz2 .
-
-../netkit-$(NK_VERSION).tar.bz2: build
-	mkdir $(UML_TOOLS_BIN_DIR)
-	cp $(UML_TOOLS_BUILD_DIR)/uml_switch/uml_switch $(UML_TOOLS_BIN_DIR)
-	cp $(UML_TOOLS_BUILD_DIR)/port-helper/port-helper $(UML_TOOLS_BIN_DIR)
-	cp $(UML_TOOLS_BUILD_DIR)/tunctl/tunctl $(UML_TOOLS_BIN_DIR)
-	cp $(UML_TOOLS_BUILD_DIR)/mconsole/uml_mconsole $(UML_TOOLS_BIN_DIR)
-	cp $(UML_TOOLS_BUILD_DIR)/moo/uml_mkcow $(UML_TOOLS_BIN_DIR)
-	cp $(UML_TOOLS_BUILD_DIR)/moo/uml_moo $(UML_TOOLS_BIN_DIR)
-	cp $(UML_TOOLS_BUILD_DIR)/uml_net/uml_net $(UML_TOOLS_BIN_DIR)
-	cp $(UML_TOOLS_BUILD_DIR)/uml_dump/uml_dump $(UML_TOOLS_BIN_DIR)
-	cd bin; ln -s lstart lrestart; ln -s lstart ltest; find uml_tools -mindepth 1 -maxdepth 1 -type f -exec ln -s {} ';'
-	mkdir -p $(NETKIT_BUILD_DIR)
-	tar -C .. --owner=0 --group=0 -cjf "../netkit-$(NK_VERSION).tar.bz2" \
-		--exclude=DONT_PACK --exclude=Makefile --exclude=fs --exclude=kernel \
-		--exclude=awk --exclude=basename --exclude=date --exclude=dirname \
-		--exclude=find --exclude=fuser --exclude=grep --exclude=head --exclude=id \
-		--exclude=kill --exclude=ls --exclude=lsof --exclude=ps --exclude=wc \
-		--exclude=getopt --exclude=netkit_commands.log --exclude=stresslabgen.sh \
-		--exclude=build_tarball.sh --exclude="netkit-$(NK_VERSION).tar.bz2" --exclude=FAQ.old \
-		--exclude=CVS --exclude=TODO \
-                --exclude=netkit-filesystem-F* \
-		--exclude=netkit-kernel-* \
-                --exclude=fs \
-		--exclude=kernel \
-		--exclude=*.bz2 \
-                --exclude=.* netkit/
+package: build
+	mkdir $(NETKIT_BUILD_DIR)
+	cp -r bin  CHANGES check_configuration.d  check_configuration.sh  COPYING  INSTALL  man  netkit.conf  Netkit-konsole.profile  netkit-version  README $(NETKIT_BUILD_DIR)
+	mkdir  $(NETKIT_BUILD_DIR)$(UML_TOOLS_BIN_DIR)
+	cp $(UML_TOOLS_BUILD_DIR)/uml_switch/uml_switch $(NETKIT_BUILD_DIR)$(UML_TOOLS_BIN_DIR)
+	cp $(UML_TOOLS_BUILD_DIR)/port-helper/port-helper $(NETKIT_BUILD_DIR)$(UML_TOOLS_BIN_DIR)
+	cp $(UML_TOOLS_BUILD_DIR)/tunctl/tunctl $(NETKIT_BUILD_DIR)$(UML_TOOLS_BIN_DIR)
+	cp $(UML_TOOLS_BUILD_DIR)/mconsole/uml_mconsole $(NETKIT_BUILD_DIR)$(UML_TOOLS_BIN_DIR)
+	cp $(UML_TOOLS_BUILD_DIR)/moo/uml_mkcow $(NETKIT_BUILD_DIR)$(UML_TOOLS_BIN_DIR)
+	cp $(UML_TOOLS_BUILD_DIR)/moo/uml_moo $(NETKIT_BUILD_DIR)$(UML_TOOLS_BIN_DIR)
+	cp $(UML_TOOLS_BUILD_DIR)/uml_net/uml_net $(NETKIT_BUILD_DIR)$(UML_TOOLS_BIN_DIR)
+	cp $(UML_TOOLS_BUILD_DIR)/uml_dump/uml_dump $(NETKIT_BUILD_DIR)$(UML_TOOLS_BIN_DIR)
+	cd $(NETKIT_BUILD_DIR)bin ; ln -s lstart lrestart; ln -s lstart ltest; find uml_tools -mindepth 1 -maxdepth 1 -type f -exec ln -s {} ';'
+	cd ../..
+	tar -C .. --owner=0 --group=0 -cjf "../netkit-$(NK_VERSION).tar.bz2" netkit/
 
 build: clean
 	mkdir $(BUILD_DIR)
