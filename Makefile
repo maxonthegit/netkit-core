@@ -41,9 +41,9 @@ package: build
 	cp $(UML_TOOLS_BUILD_DIR)/moo/uml_moo $(NETKIT_BUILD_DIR)$(UML_TOOLS_BIN_DIR)
 	cp $(UML_TOOLS_BUILD_DIR)/uml_net/uml_net $(NETKIT_BUILD_DIR)$(UML_TOOLS_BIN_DIR)
 	cp $(UML_TOOLS_BUILD_DIR)/uml_dump/uml_dump $(NETKIT_BUILD_DIR)$(UML_TOOLS_BIN_DIR)
-	cd $(NETKIT_BUILD_DIR)bin ; ln -s lstart lrestart; ln -s lstart ltest; find uml_tools -mindepth 1 -maxdepth 1 -type f -exec ln -s {} ';'
-	cd ../..
-	tar -C .. --owner=0 --group=0 -cjf "../netkit-$(NK_VERSION).tar.bz2" netkit/
+
+	(cd $(NETKIT_BUILD_DIR)bin &&  ln -s lstart lrestart; ln -s lstart ltest; find uml_tools -mindepth 1 -maxdepth 1 -type f -exec ln -s {} ';' && cd -)
+	tar -C $(BUILD_DIR) --owner=0 --group=0 -cjf "netkit-$(NK_VERSION).tar.bz2" netkit/
 
 build: clean
 	mkdir $(BUILD_DIR)
@@ -57,5 +57,4 @@ build: clean
 clean:
 	cd bin; find . -mindepth 1 -maxdepth 1 -type l -exec unlink {} ";"
 	rm -rf $(BUILD_DIR)
-	rm -rf $(UML_TOOLS_BIN_DIR)
 	rm -f netkit-$(NK_VERSION).tar.bz2
