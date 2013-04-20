@@ -1,10 +1,10 @@
 # The following variables must contain relative paths
 NK_VERSION=$(shell awk '/ version [0-9]/ {print $$NF}' netkit-version)
 
-SRC_DIR=src
+SRC_DIR=$(CURDIR)/src/
 UML_TOOLS_DIR=$(SRC_DIR)/tools-20070815/
 PATCHES_DIR=$(SRC_DIR)/patches/
-BUILD_DIR=build
+BUILD_DIR=$(CURDIR)/build/
 UML_TOOLS_BUILD_DIR=$(BUILD_DIR)/uml_tools/
 NETKIT_BUILD_DIR=$(BUILD_DIR)/netkit/
 UML_TOOLS_BIN_DIR=bin/uml_tools/
@@ -60,7 +60,6 @@ package: build
 	cp $(UML_TOOLS_BUILD_DIR)/moo/uml_moo $(NETKIT_BUILD_DIR)$(UML_TOOLS_BIN_DIR)
 	cp $(UML_TOOLS_BUILD_DIR)/uml_net/uml_net $(NETKIT_BUILD_DIR)$(UML_TOOLS_BIN_DIR)
 	cp $(UML_TOOLS_BUILD_DIR)/uml_dump/uml_dump $(NETKIT_BUILD_DIR)$(UML_TOOLS_BIN_DIR)
-
 	(cd $(NETKIT_BUILD_DIR)bin &&  ln -s lstart lrestart; ln -s lstart ltest; find uml_tools -mindepth 1 -maxdepth 1 -type f -exec ln -s {} ';' && cd -)
 	tar -C $(BUILD_DIR) --owner=0 --group=0 -cjf "../netkit-$(NK_VERSION).tar.bz2" netkit/
 
@@ -74,6 +73,4 @@ build: clean check
 
 
 clean:
-	cd bin; find . -mindepth 1 -maxdepth 1 -type l -exec unlink {} ";"
 	rm -rf $(BUILD_DIR)
-	rm -f netkit-$(NK_VERSION).tar.bz2
