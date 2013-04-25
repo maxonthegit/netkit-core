@@ -7,9 +7,9 @@ diff -Naur tools-20070815//Makefile build/Makefile
  SUBDIRS = lib jail jailtest humfsify mconsole moo port-helper $(TUNCTL) \
 -	uml_net uml_switch watchdog umlfs
 +	uml_net uml_switch watchdog umlfs uml_dump
- UMLVER = $(shell date +%Y%m%d)
- TARBALL = uml_utilities_$(UMLVER).tar.bz2
- BIN_DIR = /usr/bin
+
+ CFLAGS = -g -Wall -static -02
+
 diff -Naur tools-20070815//uml_dump/Makefile build/uml_dump/Makefile
 --- tools-20070815//uml_dump/Makefile	1970-01-01 01:00:00.000000000 +0100
 +++ build/uml_dump/Makefile	2011-05-20 22:13:52.916885002 +0200
