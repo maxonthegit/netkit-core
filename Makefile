@@ -1,5 +1,7 @@
 include Makefile.config
 
+export $(SIZE_ARCH)
+
 # The following variables must contain relative paths
 NK_VERSION=$(shell awk '/ version [0-9]/ {print $$NF}' netkit-version)
 
@@ -19,7 +21,7 @@ default: help
 
 check:
 	@echo
-	@echo -e "subarch is: \e[1m$(SUBARCH)\e[0m"
+	@echo -e "subarch is: \e[1m$(SIZE_ARCH)\e[0m"
 	@echo -e "Checking \e[1mdebian\e[0m"
 	cat /etc/debian_version
 	@echo -e "Checking debian version \e[1m(6.X.X)\e[0m"
@@ -73,7 +75,7 @@ build: clean check
 	for PATCH in $(shell find $(PATCHES_DIR) -type f); do \
 		cat $${PATCH} | patch -d $(UML_TOOLS_BUILD_DIR) -p1; \
 	done
-	(cd $(UML_TOOLS_BUILD_DIR) && $(MAKE) && cd -)
+	(cd $(UML_TOOLS_BUILD_DIR) && $(MAKE) SIZE_ARCH=$(SIZE_ARCH) && cd -)
 
 
 clean:
