@@ -1,3 +1,5 @@
+include Makefile.config
+
 # The following variables must contain relative paths
 NK_VERSION=$(shell awk '/ version [0-9]/ {print $$NF}' netkit-version)
 
@@ -17,6 +19,7 @@ default: help
 
 check:
 	@echo
+	@echo -e "subarch is: \e[1m$(SUBARCH)\e[0m"
 	@echo -e "Checking \e[1mdebian\e[0m"
 	cat /etc/debian_version
 	@echo -e "Checking debian version \e[1m(6.X.X)\e[0m"

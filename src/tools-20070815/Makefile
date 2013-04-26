@@ -3,7 +3,7 @@ TUNCTL = $(shell [ -e /usr/include/linux/if_tun.h ] && echo tunctl)
 SUBDIRS = lib jail jailtest humfsify mconsole moo port-helper $(TUNCTL) \
 	uml_net uml_switch watchdog umlfs
 
-CFLAGS = -g -Wall -static -O2
+CFLAGS = -g -Wall -static -O2 -m$(ARCH)
 
 export CFLAGS
 
