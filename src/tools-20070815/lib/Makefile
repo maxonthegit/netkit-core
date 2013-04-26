@@ -1,6 +1,6 @@
 LIB = libuml.a
 OBJS = rights.o
-CFLAGS = -g -Wall
+CFLAGS ?= -g -Wall
 
 all : $(LIB)
 

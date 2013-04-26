@@ -5,8 +5,8 @@ diff -Naur tools-20070815//Makefile build/Makefile
  TUNCTL = $(shell [ -e /usr/include/linux/if_tun.h ] && echo tunctl)
  
  SUBDIRS = lib jail jailtest humfsify mconsole moo port-helper $(TUNCTL) \
--	uml_net uml_switch watchdog umlfs
-+	uml_net uml_switch watchdog umlfs uml_dump
+-	uml_net uml_switch watchdog
++	uml_net uml_switch watchdog uml_dump
 
  CFLAGS = -g -Wall -static -02 -m$(SIZE_ARCH)
 
