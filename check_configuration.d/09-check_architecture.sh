@@ -28,18 +28,22 @@
 # you should call one of the functions "check_warning" or "check_failure"
 # (depending on the severity of the problem).
 
-# Check whether 32 bit executable files can be run (on 64 bit hosts, this may
-# require installing 32-bit compatibility libraries).
+# Check whether executables can be run.
 
-check_message "Checking whether 32-bit executables can run... "
+check_message "Checking whether executables can run... "
+
+ARCH=`uname -m`
 
 if ! $NETKIT_HOME/kernel/netkit-kernel --help >/dev/null 2>&1; then
    echo "failed!"
    echo
-   echo "*** Error: Your system appears not to be able to run 32 bit applications."
-   echo "If you are running a 64-bit Linux distribution, this can be fixed by installing"
-   echo "the following packages: ia32-libs, libc6-i386. Otherwise, please check that"
-   echo "you have installed all the Netkit packages correctly and try again."
+   echo "*** Error: Your system appears not to be able to run the linux kernel."
+   echo
+   check_failure
+elif ! $NETKIT_HOME/bin/uml-tools/vdump --help >/dev/null 2>&1; then
+   echo "failed!"
+   echo
+   echo "*** Error: Your system appears not to be able to run UML executables."
    echo
    check_failure
 else
