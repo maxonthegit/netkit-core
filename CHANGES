@@ -1,3 +1,9 @@
+2.10
+  - support for 32 and 64 bits architecture for UML tools
+  - add binary check during check_configuration.d (to detect problem when
+    the user install the wrong version of netkit in respect of his host
+    architecture).
+
 2.9
   - renaming vconfig to vconf (zioproto)
   - support for connection mconsole (babazka)
