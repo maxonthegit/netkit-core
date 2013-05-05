@@ -1,3 +1,7 @@
+2.11
+  - It is now possible to run only bin/manage_tuntap script via sudo, not 
+    /bin/sh. (sv75)
+
 2.10
   - support for 32 and 64 bits architecture for UML tools
   - add binary check during check_configuration.d (to detect problem when
