@@ -22,22 +22,22 @@
 # a virtual machine to the Internet.
 # It is not intended for standalone usage.
 
-: ${NETKIT_HOME:=$VLAB_HOME}
-
-# Script arguments follow (arguments from 2 to 5 are only required when action
+# Script arguments follow (arguments from 3 to 6 are only required when action
 # is "start").
-ACTION=$1         # either "start" or "stop"
-USER_NAME=$2      # name of the user the tunnel is being configured for
-TAP_ADDRESS=$3    # address of the (host side) tap interface
-GUEST_ADDRESS=$4  # address of the (virtual machine side) guest interface 
-HUB_NAME=$5       # name of the virtual hub
+NETKIT_HOME=$1    # NETKIT_HOME environment variable. Environment was reset after sudo so we pass it in command line.
+ACTION=$2         # either "start" or "stop"
+USER_NAME=$3      # name of the user the tunnel is being configured for
+TAP_ADDRESS=$4    # address of the (host side) tap interface
+GUEST_ADDRESS=$5  # address of the (virtual machine side) guest interface
+HUB_NAME=$6       # name of the virtual hub
 
 
 TAP_DEVICE="nk_tap_$USER_NAME"
 
 
-# Include some important entries inside the path
-export PATH=$PATH:/bin:/usr/bin:/usr/local/bin:/sbin:/usr/sbin:/usr/local/sbin
+# Include some important entries inside the path along with $NETKIT_HOME/bin
+PATH=$PATH:/bin:/usr/bin:/usr/local/bin:/sbin:/usr/sbin:/usr/local/sbin:$NETKIT_HOME/bin
+export PATH
 
 # Use the correct syntax for echo, depending on the shell being used
 if type source > /dev/null 2>&1; then

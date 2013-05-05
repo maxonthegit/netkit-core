@@ -318,14 +318,10 @@ if [ ! -z "$REMOVE_TUNNELS" ]; then
       echo "   This will affect tap configurations for $USER_STRING."
       echo "******** This operation requires root privileges ********"
    fi
-   if [ "$USE_SUDO" = "yes" ]; then
-      # Default sudo configuration resets environment variables for security
-      # reasons (depends on the configuration in sudoers, and may happen even
-      # when using -E)
-      PRESERVE_ENV=$(env | egrep "(^NETKIT)|(^PATH=)")
-      TUNTAP_COMMAND="sudo -p \"$USER's password:\" /bin/sh -c \"eval $PRESERVE_ENV; $NETKIT_HOME/bin/manage_tuntap stop\""
+   if [ "$USE_SUDO" = "yes" ]; then      
+      TUNTAP_COMMAND="sudo -p \"$USER's password:\" $NETKIT_HOME/bin/manage_tuntap $NETKIT_HOME stop\""
    else
-      TUNTAP_COMMAND="su -mc \"$NETKIT_HOME/bin/manage_tuntap stop\""
+      TUNTAP_COMMAND="su -mc \"$NETKIT_HOME/bin/manage_tuntap $NETKIT_HOME stop\""
    fi
    if [ -z "$BE_QUIET" ]; then   
       run_command "" \
