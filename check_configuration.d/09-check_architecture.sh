@@ -40,7 +40,13 @@ if ! $NETKIT_HOME/kernel/netkit-kernel --help >/dev/null 2>&1; then
    echo "*** Error: Your system appears not to be able to run the linux kernel."
    echo
    check_failure
-elif ! $NETKIT_HOME/bin/uml_tools/uml_switch --help >/dev/null 2>&1; then
+fi
+
+$NETKIT_HOME/bin/uml_tools/uml_switch --help >/dev/null 2>&1
+RETVAL=$?
+
+if [ $RETVAL -ne 1 ]
+then
    echo "failed!"
    echo
    echo "*** Error: Your system appears not to be able to run UML executables."
