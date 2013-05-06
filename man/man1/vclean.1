@@ -26,7 +26,7 @@ is not used any more and the corresponding configuration settings must be remove
 (see \fBvstart\fR(1) for a description of ``\fBtap\fR'' collision domains).
 .IP \(en 2
 A network interface has been attached ``on the fly'' to a running virtual machine
-by using \fBvconfig\fR (see \fBvconfig\fR(1)). After halting (or crashing) the
+by using \fBvconf\fR (see \fBvconf\fR(1)). After halting (or crashing) the
 machine, the corresponding virtual hub is still running and must be terminated.
 
 .PP
@@ -79,8 +79,8 @@ should result in getting rid of all Netkit processes, even the hanging ones
 .B
 --remove-tunnels
 When using an interface attached to a ``\fBtap\fR'' collision domain for the
-first time, \fIvstart\fR (or \fIvconfig\fR, depending on the command you have
-been using to configure the interface \(en see \fBvstart\fR(1), \fBvconfig\fR(1))
+first time, \fIvstart\fR (or \fIvconf\fR, depending on the command you have
+been using to configure the interface \(en see \fBvstart\fR(1), \fBvconf\fR(1))
 takes care of automatically configuring the necessary host-side settings and, if
 found, also the iptables firewall. For details about the configuration parameters
 being altered, see \fBvstart\fR(1).
@@ -209,7 +209,7 @@ of cleaning up temporary files created after running a Netkit lab).
 
 .SH "SEE ALSO"
 \fIlclean\fR(1),
-\fIvconfig\fR(1),
+\fIvconf\fR(1),
 \fIvcrash\fR(1),
 \fIvhalt\fR(1),
 \fIvlist\fR(1),

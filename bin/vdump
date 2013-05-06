@@ -1,0 +1,139 @@
+#!/bin/sh
+
+#     Copyright 2009 Julien Iguchi-Cartigny, XLIM Laboratory, France
+#
+#     This file is part of Netkit.
+# 
+#     Netkit is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+# 
+#     Netkit is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+# 
+#     You should have received a copy of the GNU General Public License
+#     along with Netkit.  If not, see <http://www.gnu.org/licenses/>.
+
+# This is the Netkit vdump script, which is used to start uml_dump
+
+SCRIPTNAME=`basename $0`
+VERSION="2.6"
+
+if [ -z "$NETKIT_HOME" ]; then
+   echo 1>&2 "$SCRIPTNAME: The NETKIT_HOME environment variable is not properly set;"
+   echo 1>&2 "please set it as described in the Netkit documentation and try again."
+   exit 1
+fi
+
+CMDLINE="$0 $*"
+
+. "$NETKIT_HOME/bin/script_utils"
+
+# Write to the vcommands log
+logWrite $0 $*
+
+
+# This function is used to print the vlist usage
+help() {
+   echo "Usage: $SCRIPTNAME [options] domain"
+   cat << END_OF_HELP
+
+This command can be used to connect to an uml_switch and print packets in pcap format to standard output.
+
+This command also supports the following standard options:
+
+  -h, --help          Show this help.
+      --version       Print version information and exit.
+END_OF_HELP
+}
+
+# Get command line options
+INVALID_OPTION=0
+OPT_LIST="help,version"
+CMDLINE_OPTIONS=`getopt -ql "$OPT_LIST" -- "hnu:" "$@"`
+if [ $? -gt 0 ]; then
+   INVALID_OPTION=1
+fi
+
+parseCmdLine() {
+   while [ $# -gt 0 ]; do
+      CURRENT_ARGUMENT="$1"
+      case "$CURRENT_ARGUMENT" in
+      
+         --help|-h)
+            help
+            exit;;
+         
+         --version)
+            showVersion
+            exit 0;;
+            
+         --)
+            shift
+            break;;
+
+      esac
+      shift
+   done
+
+   if [ $# -ge 2 ]; then
+      echo 1>&2 "$SCRIPTNAME: only one domain."
+      exit 1
+   fi
+
+   if [ $# -eq 0 ]; then
+      echo 1>&2 "$SCRIPTNAME: missing domain."
+      exit 1
+   fi
+
+   checkSpaces "$1"
+
+   HUB_NAME=$1   
+}
+eval parseCmdLine $CMDLINE_OPTIONS
+
+
+# Check whether user gave some strange options
+if [ $INVALID_OPTION -eq 1 ]; then
+   warning "$SCRIPTNAME" "$CMDLINE" "$0" "Invalid option or missing option parameter."
+   exit 1
+fi
+
+# check if file exist and if a pipe file
+HUB_SOCKET="${HUB_SOCKET_DIR}/${HUB_SOCKET_PREFIX}_${USERID}_${HUB_NAME}${HUB_SOCKET_EXTENSION}"
+
+if [ ! -e ${HUB_SOCKET} ]; then
+   echo 1>&2 "$HUB_SOCKET not found"
+   echo 1>&2 "Domain $HUB_NAME exist ?"
+   exit 1
+fi
+
+if [ ! -S ${HUB_SOCKET} ]; then
+   echo 1>&2 "$HUB_SOCKET is not a socket"
+   exit 1
+fi
+
+run_command() {
+   if [ -z "$2" ]; then
+      SHOW_COMMAND="$3"
+   else
+      SHOW_COMMAND="$2"
+   fi
+   if [ "x$1" = "x1" ]; then
+      [ -z "$BE_QUIET" ] && echo 1>&2 "Not running ==> $SHOW_COMMAND"
+      # Report that everything went ok
+      return 0
+   else
+      [ -z "$BE_QUIET" ] && echo 1>&2 "Running ==> $SHOW_COMMAND"
+      eval $3
+      return
+   fi
+}
+JUST_PRINT=0;
+DUMP_COMMAND="uml_dump $HUB_NAME"
+COMPLETE_COMMAND="$NETKIT_HOME/bin/uml_dump $HUB_SOCKET"
+
+run_command "$JUST_PRINT" "$DUMP_COMMAND" "$COMPLETE_COMMAND"

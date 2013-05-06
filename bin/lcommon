@@ -261,6 +261,9 @@ startSingleVM() {
                   if (length(parameter_name)==1) parameter="-" parameter_name
                   else parameter="--" parameter_name
                }
+               if (match(parameter_name,"^append")) {
+                 parameter="--append"
+               } 
                if (length(value)>0)
                   # This option requires an argument
                   if (length(parameter_name)==1) printf "%s %s ",parameter,value

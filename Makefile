@@ -1,54 +1,84 @@
+include Makefile.config
+
+export $(SIZE_ARCH)
+
 # The following variables must contain relative paths
 NK_VERSION=$(shell awk '/ version [0-9]/ {print $$NF}' netkit-version)
-PUBLISH_DIR=/afs/vn.uniroma3.it/user/n/netkit/public/public_html/download/netkit/
-MANPAGES_DIR=/afs/vn.uniroma3.it/user/n/netkit/public/public_html/man/
 
-.PHONY: default help pack publish
+SRC_DIR=src
+UML_TOOLS_DIR=$(SRC_DIR)/tools-20070815/
+PATCHES_DIR=$(SRC_DIR)/patches/
+BUILD_DIR=build
+UML_TOOLS_BUILD_DIR=$(BUILD_DIR)/uml_tools/
+NETKIT_BUILD_DIR=$(BUILD_DIR)/netkit/
+UML_TOOLS_BIN_DIR=bin/uml_tools/
+
+DEBIAN_VERSION=`cat /etc/debian_version | cut -c 1`
+
+.PHONY: default help pack
 
 default: help
+
+check:
+	@echo
+	@echo -e "subarch is: \e[1m$(SIZE_ARCH)\e[0m"
+	@echo -e "Checking \e[1mdebian\e[0m"
+	cat /etc/debian_version
+	@echo -e "Checking debian version \e[1m(6.X.X)\e[0m"
+	test  $(DEBIAN_VERSION) = "6"
+	@echo -e "Checking package \e[1mlibreadline6\e[0m"
+	dpkg -s libreadline6 > /dev/null 2> /dev/null
+	@echo -e "Checking package \e[1mlibreadline6-dev\e[0m"
+	dpkg -s libreadline6-dev > /dev/null 2> /dev/null
+	@echo -e "Checking package \e[1mlibfuse2\e[0m"
+	dpkg -s libfuse2 > /dev/null 2> /dev/null
+	@echo -e "Checking package \e[1mlibfuse-dev\e[0m"
+	dpkg -s libfuse-dev > /dev/null 2> /dev/null
+	@echo -e "Checking \e[1mTUNTAP\e[0m include file"
+	test -e /usr/include/linux/if_tun.h
+	
 
 help:
 	@echo
 	@echo -e "\e[1mAvailable targets are:\e[0m"
 	@echo
-	@echo -e "  \e[1mpack\e[0m       Create a distributable tarball of Netkit."
+	@echo -e "  \e[1mpackage\e[0m    Create a distributable tarball of Netkit."
 	@echo
-	@echo -e "  \e[1mpublish\e[0m    Copy the Netkit tarball to the publicly accessible"
-	@echo "             download directory. Also update the currently"
-	@echo "             published readme, installation instructions, and"
-	@echo "             changelog. Must be run from a machine with AFS"
-	@echo "             access and by a user having a token with write"
-	@echo "             permissions on the Netkit web site directory."
+	@echo -e "  \e[1mbuild\e[0m      Patch then build the uml tools."
 	@echo
-	@echo -e "  \e[1mmanpublish\e[0m Publish the Netkit man pages on the Netkit web"
-	@echo "             site, after converting them to HTML."
+	@echo -e "  \e[1mclean\e[0m      Clean the building directories and the uml-tools binaries."
 	@echo
 	@echo "The above targets only affect the core Netkit distribution."
 	@echo "In order to also package the kernel and/or filesystem, please"
 	@echo "run the corresponding Makefile in the applicable directory."
 	@echo
 
-pack: ../netkit-$(NK_VERSION).tar.bz2
-	mv ../netkit-$(NK_VERSION).tar.bz2 .
+package: build
+	mkdir $(NETKIT_BUILD_DIR)
+	cp -r bin  CHANGES check_configuration.d  check_configuration.sh  COPYING  INSTALL  man  netkit.conf  Netkit-konsole.profile  netkit-version  README $(NETKIT_BUILD_DIR)
+	mkdir  $(NETKIT_BUILD_DIR)$(UML_TOOLS_BIN_DIR)
+	cp $(UML_TOOLS_BUILD_DIR)/uml_switch/uml_switch $(NETKIT_BUILD_DIR)$(UML_TOOLS_BIN_DIR)
+	cp $(UML_TOOLS_BUILD_DIR)/port-helper/port-helper $(NETKIT_BUILD_DIR)$(UML_TOOLS_BIN_DIR)
+	cp $(UML_TOOLS_BUILD_DIR)/tunctl/tunctl $(NETKIT_BUILD_DIR)$(UML_TOOLS_BIN_DIR)
+	cp $(UML_TOOLS_BUILD_DIR)/mconsole/uml_mconsole $(NETKIT_BUILD_DIR)$(UML_TOOLS_BIN_DIR)
+	cp $(UML_TOOLS_BUILD_DIR)/moo/uml_mkcow $(NETKIT_BUILD_DIR)$(UML_TOOLS_BIN_DIR)
+	cp $(UML_TOOLS_BUILD_DIR)/moo/uml_moo $(NETKIT_BUILD_DIR)$(UML_TOOLS_BIN_DIR)
+	cp $(UML_TOOLS_BUILD_DIR)/uml_net/uml_net $(NETKIT_BUILD_DIR)$(UML_TOOLS_BIN_DIR)
+	cp $(UML_TOOLS_BUILD_DIR)/uml_dump/uml_dump $(NETKIT_BUILD_DIR)$(UML_TOOLS_BIN_DIR)
 
-../netkit-$(NK_VERSION).tar.bz2:
-	cd bin; ln -s lstart lrestart; ln -s lstart ltest; find uml_tools -mindepth 1 -maxdepth 1 -type f -exec ln -s {} ';'
-	tar -C .. --owner=0 --group=0 -cjf "../netkit-$(NK_VERSION).tar.bz2" \
-		--exclude=DONT_PACK --exclude=Makefile --exclude=fs --exclude=kernel \
-		--exclude=awk --exclude=basename --exclude=date --exclude=dirname \
-		--exclude=find --exclude=fuser --exclude=grep --exclude=head --exclude=id \
-		--exclude=kill --exclude=ls --exclude=lsof --exclude=ps --exclude=wc \
-		--exclude=getopt --exclude=netkit_commands.log --exclude=stresslabgen.sh \
-		--exclude=build_tarball.sh --exclude="netkit-$(NK_VERSION).tar.bz2" --exclude=FAQ.old \
-		--exclude=CVS --exclude=TODO --exclude=netkit-filesystem-F* \
-		--exclude=netkit-kernel-* --exclude=.* netkit/
+	(cd $(NETKIT_BUILD_DIR)bin &&  ln -s lstart lrestart; ln -s lstart ltest; find uml_tools -mindepth 1 -maxdepth 1 -type f -exec ln -s {} ';' && cd -)
+	tar -C $(BUILD_DIR) --owner=0 --group=0 -cjf "../netkit-core-$(NK_VERSION)-$(SIZE_ARCH).tar.bz2" netkit/
 
-publish: netkit-$(NK_VERSION).tar.bz2
-	cp "netkit-$(NK_VERSION).tar.bz2" CHANGES INSTALL README $(PUBLISH_DIR)
-
-manpublish:
-	for i in $(shell find man -type f ! -wholename "*svn*"); do \
-		mkdir -p $(MANPAGES_DIR)/$$(dirname $$i); \
-		man2html -r $$i > $(MANPAGES_DIR)/$$i.html; \
+build: clean check
+	mkdir $(BUILD_DIR)
+	cp -rf $(UML_TOOLS_DIR) $(UML_TOOLS_BUILD_DIR)
+	for PATCH in $(shell find $(PATCHES_DIR) -type f); do \
+		cat $${PATCH} | patch -d $(UML_TOOLS_BUILD_DIR) -p1; \
 	done
+	(cd $(UML_TOOLS_BUILD_DIR) && $(MAKE) SIZE_ARCH=$(SIZE_ARCH) && cd -)
 
+
+clean:
+	cd bin; find . -mindepth 1 -maxdepth 1 -type l -exec unlink {} ";"
+	rm -rf $(BUILD_DIR)
+	rm -f ../netkit-core-$(NK_VERSION)-$(SIZE_ARCH).tar.bz2

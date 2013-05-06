@@ -1,3 +1,26 @@
+2.11
+  - It is now possible to run only bin/manage_tuntap script via sudo, not 
+    /bin/sh. (sv75)
+
+2.10
+  - support for 32 and 64 bits architecture for UML tools
+  - add binary check during check_configuration.d (to detect problem when
+    the user install the wrong version of netkit in respect of his host
+    architecture).
+
+2.9
+  - renaming vconfig to vconf (zioproto)
+  - support for connection mconsole (babazka)
+  - support for vdump (via uml_dump): small utility to connect wireshark 
+    or tcpdump directly to a uml_switch
+  - add Ktabstart, a tool to run netkit session within konsole tabs (sv75)
+  - for developpers:
+    * better looking excludes in Makefile (Markus Stenberg)
+    * sources of the uml tools are in src/ directory and patches are 
+      applied during build
+    * removing previous uml tools binaries
+    * removing obsolete goals in Makefile
+
 2.8
   - uml-utilities have been recompiled with dynamic linking and with Ubuntu
     patches applied. This makes them work also under Ubuntu 10.10. Moreover,
