@@ -280,7 +280,6 @@ fi
 
 # If no lab directory has been given, assume current directory
 LAB_DIRECTORY=${LAB_DIRECTORY:-${PWD}}
-. "$NETKIT_HOME/bin/lcommon"
 
 # Check that the lab directory exists
 if [ ! -d "$LAB_DIRECTORY" ]; then
@@ -294,6 +293,8 @@ if containsRegexp LAB_DIRECTORY " "; then
             "Invalid lab directory: \"$LAB_DIRECTORY\" (path contains spaces)."
    exit 1
 fi
+
+. "$NETKIT_HOME/bin/lcommon"
 
 # Check whether parallel startup and -f are being used together
 if [ -f "$LAB_DIRECTORY/lab.dep" -a ! -z "$FASTMODE" -a -z "$BE_SEQUENTIAL" ]; then
