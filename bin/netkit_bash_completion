@@ -21,6 +21,9 @@
 # Part of the completion routines is significantly inspired to the scripts in
 # the bash-completion package.
 
+# Enable extraglob
+shopt -s extglob
+
 # The following line has been introduced to ensure backward compatibility
 : ${NETKIT_HOME:=$VLAB_HOME}
 
@@ -286,4 +289,8 @@ complete -o nospace -F _lmanage linfo
 complete -o nospace -F _lmanage lstart
 complete -o nospace -F _lmanage lrestart
 complete -o nospace -F _lmanage ltest
+
+# Disable extraglob
+shopt -u extglob
+
 
